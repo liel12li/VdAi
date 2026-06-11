@@ -1,0 +1,22 @@
+# Core
+anthropic>=0.69
+moviepy>=2.1.2
+imageio-ffmpeg>=0.5
+Pillow>=10.0
+numpy>=1.26
+python-bidi>=0.6
+
+# Instagram fetching
+instaloader>=4.14
+requests>=2.31
+
+# Transcription (speech-to-text)
+faster-whisper>=1.0
+
+# Web UI
+fastapi>=0.110
+uvicorn>=0.29
+python-multipart>=0.0.9
+
+# Dev
+pytest>=8.0

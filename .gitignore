@@ -1,0 +1,24 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Secrets
+.env
+
+# Generated content
+outputs/
+.vdai_cache/
+*.mp4
+*.mov
+*.srt
+
+# User music library (copyrighted files stay local)
+assets/music/*
+!assets/music/.gitkeep
+
+# OS / editors
+.DS_Store
+.idea/
+.vscode/

@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VdAi — מחולל סרטוני Reels</title>
+<style>
+  :root { --accent: #c96f4a; --bg: #f6f2ea; --ink: #2b2620; }
+  * { box-sizing: border-box; }
+  body { font-family: "Heebo", "Segoe UI", sans-serif; background: var(--bg); color: var(--ink);
+         margin: 0; padding: 24px; }
+  .card { max-width: 720px; margin: 0 auto; background: #fff; border-radius: 18px;
+          padding: 28px 32px; box-shadow: 0 8px 30px rgba(43,38,32,.08); }
+  h1 { margin: 0 0 4px; font-size: 1.7rem; }
+  .sub { color: #7a7166; margin: 0 0 24px; }
+  label { display: block; font-weight: 600; margin: 16px 0 6px; }
+  input[type=text], input[type=number], select, textarea {
+    width: 100%; padding: 10px 12px; border: 1px solid #ddd3c4; border-radius: 10px;
+    font: inherit; background: #fffdf9; }
+  input[type=file] { margin-top: 4px; }
+  .row { display: flex; gap: 16px; } .row > div { flex: 1; }
+  button { margin-top: 22px; width: 100%; padding: 14px; font-size: 1.05rem; font-weight: 700;
+           color: #fff; background: var(--accent); border: 0; border-radius: 12px; cursor: pointer; }
+  button:disabled { opacity: .55; cursor: wait; }
+  .status { margin-top: 18px; padding: 14px; border-radius: 12px; background: #f1ece2; display: none; }
+  .error { background: #fbe3dd; color: #8c2f17; }
+  .out { margin-top: 14px; padding: 14px; border: 1px solid #eee4d4; border-radius: 12px; }
+  .out video { width: 100%; max-width: 260px; border-radius: 12px; display: block; margin: 8px 0; }
+  .copybox { background: #faf6ee; border-radius: 8px; padding: 10px; font-size: .92rem;
+             white-space: pre-wrap; }
+  .hint { font-size: .85rem; color: #93897c; margin-top: 4px; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>🎬 VdAi</h1>
+  <p class="sub">מחולל סרטוני Reels פרסומיים — מזינים עסק, מקבלים סרטונים מוכנים לפרסום</p>
+
+  <form id="form">
+    <label>עמוד אינסטגרם של העסק</label>
+    <input type="text" name="username" placeholder="לדוגמה: cafe_dizengoff (פרופיל ציבורי)">
+    <div class="hint">או במקום זה — העלו תמונות/סרטונים של העסק:</div>
+    <input type="file" name="media" multiple accept="image/*,video/*">
+
+    <div class="row">
+      <div>
+        <label>שם העסק (לא חובה)</label>
+        <input type="text" name="name" placeholder="מספרת דנה">
+      </div>
+      <div>
+        <label>כמה סרטונים?</label>
+        <input type="number" name="count" value="3" min="1" max="6">
+      </div>
+    </div>
+
+    <label>תיאור קצר של העסק (לא חובה)</label>
+    <textarea name="bio" rows="2" placeholder="מספרה בוטיק בלב תל אביב, מתמחים בצבע ובהחלקות"></textarea>
+
+    <div class="row">
+      <div>
+        <label>שפה</label>
+        <select name="lang">
+          <option value="auto">זיהוי אוטומטי</option>
+          <option value="he">עברית</option>
+          <option value="en">English</option>
+        </select>
+      </div>
+      <div>
+        <label>קריינות (תתומלל לכתוביות)</label>
+        <input type="file" name="voiceover" accept="audio/*,video/*">
+      </div>
+    </div>
+
+    <label>מוזיקת רקע (לא חובה)</label>
+    <input type="file" name="music" accept="audio/*">
+
+    <button id="go" type="submit">צרו לי סרטונים ✨</button>
+  </form>
+
+  <div id="status" class="status"></div>
+  <div id="results"></div>
+</div>
+
+<script>
+const form = document.getElementById('form');
+const statusBox = document.getElementById('status');
+const results = document.getElementById('results');
+const go = document.getElementById('go');
+
+form.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  go.disabled = true;
+  results.innerHTML = '';
+  show('שולח את הבקשה...');
+  try {
+    const res = await fetch('/api/jobs', { method: 'POST', body: new FormData(form) });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'שגיאה');
+    poll(data.job_id);
+  } catch (err) {
+    show('שגיאה: ' + err.message, true);
+    go.disabled = false;
+  }
+});
+
+function show(msg, isError = false) {
+  statusBox.style.display = 'block';
+  statusBox.textContent = msg;
+  statusBox.className = 'status' + (isError ? ' error' : '');
+}
+
+async function poll(jobId) {
+  const res = await fetch(`/api/jobs/${jobId}`);
+  const job = await res.json();
+  show(job.step || job.status, job.status === 'error');
+  render(job.outputs || []);
+  if (job.status === 'done') { show('מוכן! הסרטונים למטה ⬇️'); go.disabled = false; return; }
+  if (job.status === 'error') { show('שגיאה: ' + job.error, true); go.disabled = false; return; }
+  setTimeout(() => poll(jobId), 2500);
+}
+
+function render(outputs) {
+  results.innerHTML = outputs.map(o => `
+    <div class="out">
+      <strong>${o.title}</strong>
+      <video src="${o.url}" controls playsinline></video>
+      <a href="${o.url}" download>⬇️ הורדת הקובץ</a>
+      <div class="copybox">${o.caption}\n\n${(o.hashtags || []).join(' ')}</div>
+    </div>`).join('');
+}
+</script>
+</body>
+</html>
