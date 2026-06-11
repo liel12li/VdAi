@@ -38,7 +38,8 @@
 
   <form id="form">
     <label>עמוד אינסטגרם של העסק</label>
-    <input type="text" name="username" placeholder="לדוגמה: cafe_dizengoff (פרופיל ציבורי)">
+    <input type="text" name="username" placeholder="לדוגמה: cafe_dizengoff">
+    <div class="hint" id="igStatus"></div>
     <div class="hint">או במקום זה — העלו תמונות/סרטונים של העסק:</div>
     <input type="file" name="media" multiple accept="image/*,video/*">
 
@@ -82,6 +83,13 @@
 </div>
 
 <script>
+fetch('/api/status').then(r => r.json()).then(s => {
+  const el = document.getElementById('igStatus');
+  el.textContent = s.instagram_user
+    ? `🔓 מחובר לאינסטגרם כ-@${s.instagram_user}`
+    : 'מצב אנונימי (פרופילים ציבוריים בלבד). לחיבור חשבון: python -m vdai login';
+}).catch(() => {});
+
 const form = document.getElementById('form');
 const statusBox = document.getElementById('status');
 const results = document.getElementById('results');

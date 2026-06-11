@@ -72,6 +72,20 @@ def _build_parser() -> argparse.ArgumentParser:
     tr.add_argument("--whisper-model", default=settings.whisper_model)
     tr.set_defaults(func=_cmd_transcribe)
 
+    # ---- login / logout ----
+    login = sub.add_parser(
+        "login",
+        help="חיבור חשבון אינסטגרם — נותן לתוכנה 'עיניים' יציבות באינסטגרם",
+    )
+    login.add_argument("ig_username", nargs="?", help="שם המשתמש שלכם באינסטגרם")
+    login.add_argument("--check", action="store_true",
+                       help="בדיקה מול אינסטגרם שהחיבור השמור עדיין תקף")
+    login.set_defaults(func=_cmd_login)
+
+    logout = sub.add_parser("logout", help="מחיקת חיבור אינסטגרם שמור מהמחשב")
+    logout.add_argument("ig_username", nargs="?", help="חשבון ספציפי (ברירת מחדל: כולם)")
+    logout.set_defaults(func=_cmd_logout)
+
     # ---- web ----
     web = sub.add_parser("web", help="הרצת ממשק ווב מקומי")
     web.add_argument("--host", default="127.0.0.1")
@@ -190,6 +204,53 @@ def _cmd_transcribe(args) -> int:
         print(f"✅ נשמר: {out}")
     elif args.out:
         print("שימו לב: --out רלוונטי רק יחד עם --burn")
+    return 0
+
+
+def _cmd_login(args) -> int:
+    from .instagram.auth import check_session, configured_username, interactive_login
+
+    if args.check:
+        username, valid = check_session(settings.cache_dir)
+        if not username:
+            print("אין חשבון אינסטגרם מחובר. התחברו עם: python -m vdai login <שם_משתמש>")
+            return 1
+        if valid:
+            print(f"✅ החיבור של @{username} תקף — לתוכנה יש עיניים באינסטגרם.")
+            return 0
+        print(f"⚠️  הסשן של @{username} כבר לא תקף. התחברו שוב: python -m vdai login {username}")
+        return 1
+
+    username = args.ig_username or configured_username(settings.cache_dir)
+    if not username:
+        raise SystemExit("ציינו שם משתמש: python -m vdai login <שם_משתמש>")
+
+    import getpass
+
+    print(f"🔐 מתחבר לאינסטגרם כ-@{username}")
+    print("   (הסיסמה לא נשמרת — נשמרות רק עוגיות הסשן, מקומית בלבד)")
+    password = getpass.getpass("   סיסמה: ")
+    interactive_login(
+        username,
+        password,
+        settings.cache_dir,
+        two_factor_provider=lambda: input("   קוד אימות דו-שלבי (מהאפליקציה/SMS): "),
+    )
+    print(f"✅ מחובר! מעכשיו כל הורדה מאינסטגרם תשתמש בחשבון @{username}.")
+    print("   ניתוק: python -m vdai logout")
+    return 0
+
+
+def _cmd_logout(args) -> int:
+    from .instagram.auth import logout
+
+    removed = logout(settings.cache_dir, args.ig_username)
+    if removed:
+        for path in removed:
+            print(f"🗑️  נמחק: {path}")
+        print("התוכנה תמשיך לעבוד במצב אנונימי (פרופילים ציבוריים בלבד).")
+    else:
+        print("לא נמצא חיבור שמור.")
     return 0
 
 

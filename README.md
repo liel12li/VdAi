@@ -39,6 +39,28 @@ pip install -r requirements.txt
 export ANTHROPIC_API_KEY=sk-ant-...   # או קובץ ‎.env‎ לפי ‎.env.example‎
 ```
 
+## 🔐 חיבור חשבון אינסטגרם (מומלץ)
+
+חיבור החשבון שלכם נותן לתוכנה "עיניים" יציבות באינסטגרם: פחות חסימות
+rate-limit, וגישה גם לפרופילים פרטיים שהחשבון שלכם עוקב אחריהם.
+
+```bash
+python -m vdai login my_username     # סיסמה + קוד אימות דו-שלבי אם מופעל
+python -m vdai login --check         # האם החיבור עדיין תקף?
+python -m vdai logout                # ניתוק ומחיקת הסשן מהמחשב
+```
+
+איך זה עובד ומה חשוב לדעת:
+
+- **הסיסמה לא נשמרת לעולם** — נשמרות רק עוגיות הסשן, בקובץ מקומי
+  (`.vdai_cache/instagram/session-<user>`, הרשאות owner-only, מחוץ ל-git).
+- קובץ הסשן שקול לגישה לחשבון — אל תעתיקו ואל תשתפו אותו.
+- אם אינסטגרם חוסם את ההתחברות הראשונה ("checkpoint"), אשרו באפליקציה
+  שזה אתם ("It was me") והריצו `login` שוב.
+- מומלץ להתחבר מאותו מחשב/רשת שבהם תריצו את התוכנה, ולא להגזים בקצב
+  ההורדות — התנהגות אנושית = פחות חסימות.
+- בלי חיבור התוכנה עדיין עובדת במצב אנונימי על פרופילים ציבוריים.
+
 ## 🖥️ ממשק ווב (הכי נוח)
 
 ```bash
@@ -92,6 +114,7 @@ python -m vdai transcribe interview.mp4 --burn interview.mp4 --out interview_cap
 | משתנה | ברירת מחדל | תיאור |
 |---|---|---|
 | `ANTHROPIC_API_KEY` | — | מפתח Claude API לקופי מותאם |
+| `VDAI_IG_USER` / `VDAI_IG_PASSWORD` | — | חיבור אינסטגרם לאוטומציה (עדיף `vdai login`) |
 | `VDAI_MODEL` | `claude-opus-4-8` | מודל Claude |
 | `VDAI_WHISPER_MODEL` | `small` | גודל מודל תמלול (`tiny`…`large-v3`) |
 | `VDAI_WIDTH` / `VDAI_HEIGHT` / `VDAI_FPS` | 1080 / 1920 / 30 | פורמט הווידאו |
@@ -101,11 +124,11 @@ python -m vdai transcribe interview.mp4 --burn interview.mp4 --out interview_cap
 
 ## 📝 הערות חשובות
 
-- **אינסטגרם** — ההורדה עובדת על פרופילים **ציבוריים** בלבד, דרך
-  [instaloader](https://instaloader.github.io/). אינסטגרם מגבילה בקשות
-  אנונימיות; אם נחסמתם זמנית, חכו או עבדו עם `--media-dir`. השימוש
-  באחריותכם ובכפוף לתנאי השימוש של אינסטגרם — מומלץ להריץ על עסק שלכם
-  או באישור בעל העסק.
+- **אינסטגרם** — ההורדה עובדת דרך
+  [instaloader](https://instaloader.github.io/): פרופילים ציבוריים גם בלי
+  חיבור, ועם `vdai login` גם פרופילים פרטיים שאתם עוקבים אחריהם. אם
+  נחסמתם זמנית, חכו או עבדו עם `--media-dir`. השימוש באחריותכם ובכפוף
+  לתנאי השימוש של אינסטגרם — מומלץ להריץ על עסק שלכם או באישור בעל העסק.
 - **תמלול** — בהרצה הראשונה יורד מודל Whisper (כמה מאות MB למודל
   `small`). לעברית מומלץ `small` ומעלה.
 - **פונט** — מצורף הפונט [Heebo](https://github.com/OdedEzer/heebo)
@@ -120,7 +143,9 @@ vdai/
 ├── cli.py               # שורת הפקודה
 ├── config.py            # הגדרות
 ├── models.py            # מבני נתונים (פרופיל, קונספט, כתוביות)
-├── instagram/fetcher.py # הורדה מאינסטגרם + מצב תיקייה מקומית
+├── instagram/
+│   ├── fetcher.py       # הורדה מאינסטגרם + מצב תיקייה מקומית
+│   └── auth.py          # חיבור חשבון: login, סשנים, 2FA
 ├── ai/creative.py       # קונספטים עם Claude + תבניות גיבוי
 ├── transcribe/engine.py # Whisper: תמלול, חלוקה לכתוביות, SRT
 ├── video/

@@ -31,6 +31,13 @@ def index() -> str:
     return (STATIC_DIR / "index.html").read_text(encoding="utf-8")
 
 
+@app.get("/api/status")
+def status():
+    from ..instagram.auth import configured_username
+
+    return {"instagram_user": configured_username(settings.cache_dir)}
+
+
 @app.post("/api/jobs")
 async def create_job(
     background: BackgroundTasks,

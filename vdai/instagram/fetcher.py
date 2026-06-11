@@ -1,16 +1,18 @@
 """Fetch a business profile (bio + recent media) from Instagram.
 
-Two modes:
+Three access levels:
 
-1. ``fetch_profile(username)`` — uses :mod:`instaloader` to download the
-   public profile picture and recent posts into a local cache directory.
-   Instagram aggressively rate-limits anonymous requests from datacenter
-   IPs, so this can fail; callers should surface the error and suggest
-   the local-folder mode.
+1. **Logged-in** — when an account was connected with
+   ``python -m vdai login`` (see :mod:`vdai.instagram.auth`), the saved
+   session is attached automatically. Far more reliable against rate
+   limits, and private profiles the account follows become accessible.
 
-2. ``load_local_profile(media_dir, ...)`` — builds a profile from a local
-   folder of images/videos. Useful offline, for testing, or when the user
-   already has the brand assets on disk.
+2. **Anonymous** — works for public profiles, but Instagram aggressively
+   rate-limits anonymous requests, especially from datacenter IPs.
+
+3. **Local folder** — ``load_local_profile(media_dir, ...)`` builds a
+   profile from a folder of images/videos. Useful offline, for testing,
+   or when the user already has the brand assets on disk.
 """
 
 from __future__ import annotations
@@ -20,11 +22,14 @@ import re
 from pathlib import Path
 
 from ..models import BusinessProfile, Post
+from .auth import InstagramAuthError, attach_session
 
 logger = logging.getLogger(__name__)
 
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp"}
 VIDEO_EXTS = {".mp4", ".mov", ".m4v", ".webm"}
+
+_LOGIN_HINT = "חיבור חשבון משפר את האמינות: python -m vdai login <שם_משתמש_שלכם>"
 
 
 class InstagramFetchError(RuntimeError):
@@ -36,7 +41,7 @@ def fetch_profile(
     cache_dir: str | Path = ".vdai_cache",
     max_posts: int = 12,
 ) -> BusinessProfile:
-    """Download a public Instagram profile's bio, picture and recent media."""
+    """Download an Instagram profile's bio, picture and recent media."""
     try:
         import instaloader
     except ImportError as exc:  # pragma: no cover
@@ -58,19 +63,27 @@ def fetch_profile(
     )
 
     try:
+        viewer = attach_session(loader, cache_dir)
+    except InstagramAuthError as exc:
+        raise InstagramFetchError(str(exc)) from exc
+    if viewer:
+        logger.info("🔓 גולש כ-@%s", viewer)
+
+    try:
         profile = instaloader.Profile.from_username(loader.context, username)
     except instaloader.exceptions.ProfileNotExistsException as exc:
         raise InstagramFetchError(f"הפרופיל @{username} לא נמצא") from exc
-    except instaloader.exceptions.ConnectionException as exc:
+    except instaloader.exceptions.LoginRequiredException as exc:
         raise InstagramFetchError(
-            f"אינסטגרם חסם את הבקשה (rate limit). נסו שוב מאוחר יותר או השתמשו "
-            f"ב---media-dir עם תיקייה מקומית. ({exc})"
+            f"אינסטגרם דורש התחברות כדי לצפות ב-@{username}. {_LOGIN_HINT}"
         ) from exc
+    except instaloader.exceptions.ConnectionException as exc:
+        raise InstagramFetchError(_blocked_message(username, viewer, exc)) from exc
 
-    if profile.is_private:
+    if profile.is_private and not viewer:
         raise InstagramFetchError(
-            f"הפרופיל @{username} פרטי — אפשר לעבוד רק עם פרופילים ציבוריים, "
-            "או להעביר חומרים דרך --media-dir."
+            f"הפרופיל @{username} פרטי. חברו חשבון שעוקב אחריו "
+            f"(python -m vdai login) או העבירו חומרים דרך --media-dir."
         )
 
     biz = BusinessProfile(
@@ -115,18 +128,32 @@ def fetch_profile(
                 )
             )
             count += 1
+    except instaloader.exceptions.PrivateProfileNotFollowedException as exc:
+        raise InstagramFetchError(
+            f"הפרופיל @{username} פרטי והחשבון המחובר (@{viewer}) לא עוקב אחריו."
+        ) from exc
+    except instaloader.exceptions.LoginRequiredException as exc:
+        raise InstagramFetchError(
+            f"אינסטגרם דורש התחברות כדי להוריד פוסטים מ-@{username}. {_LOGIN_HINT}"
+        ) from exc
     except instaloader.exceptions.ConnectionException as exc:
         if not biz.posts:
-            raise InstagramFetchError(
-                f"אינסטגרם חסם את הורדת הפוסטים ({exc}). נסו שוב מאוחר יותר."
-            ) from exc
+            raise InstagramFetchError(_blocked_message(username, viewer, exc)) from exc
         logger.warning("Stopped fetching posts early: %s", exc)
 
     if not biz.posts:
         raise InstagramFetchError(
-            f"לא נמצאו פוסטים ציבוריים בפרופיל @{username}."
+            f"לא נמצאו פוסטים נגישים בפרופיל @{username}."
         )
     return biz
+
+
+def _blocked_message(username: str, viewer: str | None, exc: Exception) -> str:
+    base = f"אינסטגרם חסם את הבקשה ל-@{username} (rate limit). "
+    if viewer:
+        return base + f"נסו שוב בעוד כמה דקות, או עבדו עם --media-dir. ({exc})"
+    return base + f"נסו שוב מאוחר יותר, התחברו עם חשבון ({_LOGIN_HINT}) " \
+                  f"או השתמשו ב---media-dir. ({exc})"
 
 
 def _newest_media(directory: Path, exclude: set[str]) -> Path | None:
