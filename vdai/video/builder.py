@@ -48,14 +48,23 @@ def build_reel(
     music: str | Path | None = None,
     size: tuple[int, int] | None = None,
     fps: int | None = None,
+    accent: tuple[int, int, int] | None = None,
+    logo: str | Path | None = None,
+    progress_bar: bool = True,
+    caption_style: str = "pill",
+    preset: str = "medium",
 ) -> Path:
-    """Render the reel and return the output path."""
+    """Render the reel and return the output path.
+
+    ``accent``/``logo`` come from a BrandKit and override the automatic
+    brand-color sampling / profile picture on the outro card.
+    """
     size = size or settings.size
     fps = fps or settings.fps
     width, height = size
     style = _STYLE.get(concept.style, _STYLE["clean"])
 
-    brand = effects.dominant_color(
+    brand = accent or effects.dominant_color(
         profile.profile_pic_path or (profile.posts[0].media_path if profile.posts else "")
     )
 
@@ -76,14 +85,16 @@ def build_reel(
                                           top=bool(captions)))
             scene_clips.append(CompositeVideoClip(layers, size=size).with_duration(duration))
 
-        scene_clips.append(_outro_card(profile, concept, brand, size))
+        scene_clips.append(_outro_card(profile, concept, brand, size, logo=logo))
 
         video = _crossfade_concat(scene_clips, size)
         total = video.duration
 
         overlays = [video, _watermark(profile.username, size, total)]
+        if progress_bar:
+            overlays.append(_progress_bar(brand, size, total))
         if captions:
-            overlays.extend(_caption_layers(captions, size, total))
+            overlays.extend(_caption_layers(captions, size, total, caption_style))
         final = CompositeVideoClip(overlays, size=size).with_duration(total)
         final = final.with_effects([vfx.FadeOut(0.4)])
 
@@ -99,7 +110,7 @@ def build_reel(
             fps=fps,
             codec="libx264",
             audio_codec="aac",
-            preset="medium",
+            preset=preset,
             threads=os.cpu_count() or 2,
             ffmpeg_params=["-pix_fmt", "yuv420p", "-movflags", "+faststart"],
             logger=None,
@@ -208,20 +219,38 @@ def _watermark(username, size, duration):
     return ImageClip(arr).with_duration(duration).with_position(("center", int(height * 0.030)))
 
 
-def _caption_layers(captions, size, total):
+CAPTION_STYLES = {
+    # name: (font ratio, pill?, pill alpha, color, stroke)
+    "pill": (0.030, True, 185, (255, 235, 120), 0),
+    "bold": (0.040, False, 0, (255, 255, 255), 5),
+    "minimal": (0.026, False, 0, (255, 255, 255), 2),
+}
+
+
+def caption_array(text, size, style_name="pill"):
+    width, height = size
+    ratio, pill, alpha, color, stroke = CAPTION_STYLES.get(
+        style_name, CAPTION_STYLES["pill"]
+    )
+    return textmod.text_array(
+        text,
+        font_size=int(height * ratio),
+        max_width=int(width * 0.86),
+        pill=pill,
+        pill_color=(0, 0, 0, alpha),
+        color=color,
+        stroke_width=stroke,
+        shadow=not pill and not stroke,
+    )
+
+
+def _caption_layers(captions, size, total, style_name="pill"):
     width, height = size
     layers = []
     for seg in captions:
         if seg.start >= total:
             break
-        arr = textmod.text_array(
-            seg.text,
-            font_size=int(height * 0.030),
-            max_width=int(width * 0.86),
-            pill=True,
-            pill_color=(0, 0, 0, 185),
-            color=(255, 235, 120),  # warm yellow — the reels captions standard
-        )
+        arr = caption_array(seg.text, size, style_name)
         end = min(seg.end, total - 0.1)
         layers.append(
             ImageClip(arr)
@@ -232,12 +261,27 @@ def _caption_layers(captions, size, total):
     return layers
 
 
-def _outro_card(profile, concept, brand, size):
+def _progress_bar(accent, size, total):
+    """Thin accent-colored bar growing left→right along the top edge."""
+    import numpy as np
+
+    width, height = size
+    bar_h = max(4, height // 240)
+    strip = np.full((bar_h, width, 3), accent, dtype=np.uint8)
+    return (
+        ImageClip(strip)
+        .with_duration(total)
+        .resized(lambda t: (max(2, int(width * min(1.0, t / total))), bar_h))
+        .with_position((0, 0))
+    )
+
+
+def _outro_card(profile, concept, brand, size, logo=None):
     width, height = size
     bg = effects.vertical_gradient(size, effects.darken(brand, 0.55), effects.darken(brand, 0.18))
     layers = [ImageClip(bg).with_duration(OUTRO_DURATION)]
 
-    pic = _circle_profile_pic(profile, int(height * 0.13))
+    pic = _circle_image(str(logo) if logo else profile.profile_pic_path, int(height * 0.13))
     if pic is not None:
         layers.append(
             ImageClip(pic)
@@ -262,14 +306,14 @@ def _outro_card(profile, concept, brand, size):
     return CompositeVideoClip(layers, size=size).with_duration(OUTRO_DURATION)
 
 
-def _circle_profile_pic(profile, diameter):
-    if not profile.profile_pic_path or not Path(profile.profile_pic_path).exists():
+def _circle_image(image_path, diameter):
+    if not image_path or not Path(image_path).exists():
         return None
     import numpy as np
     from PIL import Image, ImageDraw, ImageOps
 
     try:
-        img = Image.open(profile.profile_pic_path).convert("RGB")
+        img = Image.open(image_path).convert("RGB")
     except Exception:  # noqa: BLE001
         return None
     img = ImageOps.fit(img, (diameter, diameter), Image.LANCZOS)
@@ -317,6 +361,17 @@ def _mix_audio(voice_clip, music, mood, total):
     if len(tracks) == 1:
         return tracks[0].with_duration(min(total, tracks[0].duration))
     return CompositeAudioClip(tracks).with_duration(total)
+
+
+def save_cover(video_path: str | Path, cover_path: str | Path, t: float | None = None) -> Path:
+    """Save a cover/thumbnail frame (during the hook) from a rendered reel."""
+    from moviepy import VideoFileClip
+
+    cover_path = Path(cover_path)
+    with VideoFileClip(str(video_path)) as clip:
+        moment = t if t is not None else min(1.0, clip.duration / 3)
+        clip.save_frame(str(cover_path), t=moment)
+    return cover_path
 
 
 def _pick_music(mood: str) -> Path | None:

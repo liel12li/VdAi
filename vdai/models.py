@@ -76,6 +76,7 @@ class ReelConcept:
     music_mood: str = "uplifting"
     style: str = "clean"  # clean | bold | elegant
     language: str = "he"
+    narration: str = ""  # spoken script for TTS / recorded voiceover guidance
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -84,6 +85,46 @@ class ReelConcept:
     def from_dict(cls, data: dict) -> "ReelConcept":
         scenes = [ReelScene(**s) for s in data.pop("scenes", [])]
         return cls(scenes=scenes, **data)
+
+
+def _parse_hex(color: str) -> Optional[tuple[int, int, int]]:
+    color = color.strip().lstrip("#")
+    if len(color) != 6:
+        return None
+    try:
+        return tuple(int(color[i : i + 2], 16) for i in (0, 2, 4))  # type: ignore[return-value]
+    except ValueError:
+        return None
+
+
+@dataclass
+class BrandKit:
+    """Optional per-business branding that overrides the automatic choices."""
+
+    accent: str = ""  # hex color, e.g. "#C96F4A"
+    logo: str = ""  # path to a logo image (used on the outro card)
+    cta: str = ""  # fixed call-to-action for every reel
+    tone: str = ""  # auto | warm | luxury | energetic | young | professional
+    hashtags: list[str] = field(default_factory=list)  # always appended
+    tts_voice: str = ""  # preferred edge-tts voice name
+
+    @property
+    def accent_rgb(self) -> Optional[tuple[int, int, int]]:
+        return _parse_hex(self.accent) if self.accent else None
+
+    @classmethod
+    def load(cls, path: str | Path) -> "BrandKit":
+        p = Path(path)
+        if not p.exists():
+            raise FileNotFoundError(f"קובץ ערכת המותג {path} לא נמצא")
+        data = json.loads(p.read_text(encoding="utf-8"))
+        known = {f for f in cls.__dataclass_fields__}  # noqa: C416
+        kit = cls(**{k: v for k, v in data.items() if k in known})
+        if kit.accent and kit.accent_rgb is None:
+            raise ValueError(f"צבע מותג לא תקין: {kit.accent!r} (צפוי #RRGGBB)")
+        if kit.logo and not Path(kit.logo).exists():
+            raise FileNotFoundError(f"קובץ הלוגו {kit.logo} לא נמצא")
+        return kit
 
 
 @dataclass
@@ -111,6 +152,14 @@ def concepts_to_json(concepts: list[ReelConcept]) -> str:
     return json.dumps(
         [c.to_dict() for c in concepts], ensure_ascii=False, indent=2
     )
+
+
+def concepts_from_json(path: str | Path) -> list[ReelConcept]:
+    """Load concepts the user saved/edited (the --from-concepts flow)."""
+    data = json.loads(Path(path).read_text(encoding="utf-8"))
+    if isinstance(data, dict):  # allow {"concepts": [...]} too
+        data = data.get("concepts", [])
+    return [ReelConcept.from_dict(c) for c in data]
 
 
 def load_profile_json(path: str | Path) -> Optional[BusinessProfile]:

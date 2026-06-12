@@ -52,14 +52,36 @@ def _build_parser() -> argparse.ArgumentParser:
     _add_source_args(gen)
     gen.add_argument("--count", type=int, default=3, help="כמה סרטונים לייצר (ברירת מחדל: 3)")
     gen.add_argument("--lang", default="auto", help="שפת הטקסטים: he / en / auto")
-    gen.add_argument("--voiceover", help="קובץ אודיו של קריינות — יתומלל ויוטמע ככתוביות")
+    gen.add_argument("--tone", default="auto",
+                     choices=["auto", "warm", "luxury", "energetic", "young", "professional"],
+                     help="טון המותג בכתיבה")
+    gen.add_argument("--format", default="reel", dest="formats",
+                     help="פורמטים מופרדים בפסיק: reel,square,portrait,wide")
+    gen.add_argument("--voiceover", help="קובץ קריינות מוקלטת — יתומלל ויוטמע ככתוביות")
+    gen.add_argument("--tts", action="store_true",
+                     help="קריינות אוטומטית: Claude כותב תסריט והתוכנה מקריאה אותו")
+    gen.add_argument("--tts-voice", default="", help="קול ספציפי (למשל he-IL-AvriNeural)")
+    gen.add_argument("--tts-gender", default="female", choices=["female", "male"],
+                     help="מין הקול בקריינות האוטומטית")
     gen.add_argument("--music", help="קובץ מוזיקת רקע (אחרת נבחר מ-assets/music אם קיים)")
+    gen.add_argument("--brand", help="קובץ ערכת מותג JSON (ראו brand.example.json)")
+    gen.add_argument("--caption-style", default="pill", choices=["pill", "bold", "minimal"],
+                     help="סגנון הכתוביות")
+    gen.add_argument("--no-progress-bar", action="store_true", help="בלי פס התקדמות עליון")
+    gen.add_argument("--draft", action="store_true",
+                     help="מצב טיוטה: חצי רזולוציה ורינדור מהיר לבדיקת כיוון")
+    gen.add_argument("--package", action="store_true",
+                     help="אריזת כל סרטון ל-zip מוכן לפרסום (וידאו+קאבר+קופי+SRT)")
+    gen.add_argument("--jobs", type=int, default=1, help="רינדור מקבילי של N סרטונים")
     gen.add_argument("--out", default=str(settings.output_dir), help="תיקיית פלט")
     gen.add_argument("--no-ai", action="store_true", help="דילוג על Claude — שימוש בתבניות מובנות")
+    gen.add_argument("--no-vision", action="store_true",
+                     help="בלי לשלוח את התמונות ל-Claude (חוסך טוקנים)")
+    gen.add_argument("--concepts-only", action="store_true",
+                     help="שלב 1: יצירת קונספטים בלבד לעריכה, בלי רינדור")
+    gen.add_argument("--from-concepts", help="שלב 2: רינדור מקובץ קונספטים ערוך")
     gen.add_argument("--whisper-model", default=settings.whisper_model,
                      help="גודל מודל התמלול (tiny/base/small/medium/large-v3)")
-    gen.add_argument("--width", type=int, default=settings.width)
-    gen.add_argument("--height", type=int, default=settings.height)
     gen.set_defaults(func=_cmd_generate)
 
     # ---- transcribe ----
@@ -69,6 +91,7 @@ def _build_parser() -> argparse.ArgumentParser:
     tr.add_argument("--srt", help="נתיב לשמירת קובץ SRT")
     tr.add_argument("--burn", help="וידאו קיים שעליו ייצרבו הכתוביות")
     tr.add_argument("--out", help="נתיב פלט לוידאו עם כתוביות (עם --burn)")
+    tr.add_argument("--caption-style", default="pill", choices=["pill", "bold", "minimal"])
     tr.add_argument("--whisper-model", default=settings.whisper_model)
     tr.set_defaults(func=_cmd_transcribe)
 
@@ -136,51 +159,65 @@ def _cmd_analyze(args) -> int:
 
 
 def _cmd_generate(args) -> int:
-    from .ai.creative import generate_concepts
-    from .models import concepts_to_json
-    from .video.builder import build_reel
+    from .models import BrandKit, concepts_to_json
+    from .pipeline import GenerationOptions, run_generation
+
+    if args.voiceover and args.tts:
+        raise SystemExit("בחרו או --voiceover (הקלטה שלכם) או --tts (קריינות אוטומטית), לא שניהם")
 
     profile = _load_profile(args)
-    print(f"🧠 בונה {args.count} קונספטים ל-{profile.display_name} ...")
-    concepts = generate_concepts(
-        profile, count=args.count, language=args.lang, use_ai=not args.no_ai
+
+    options = GenerationOptions(
+        count=args.count,
+        language=args.lang,
+        use_ai=not args.no_ai,
+        use_vision=not args.no_vision,
+        tone=args.tone,
+        formats=[f.strip() for f in args.formats.split(",") if f.strip()],
+        draft=args.draft,
+        voiceover=args.voiceover,
+        tts=args.tts,
+        tts_voice=args.tts_voice,
+        tts_gender=args.tts_gender,
+        music=args.music,
+        out_dir=Path(args.out),
+        package=args.package,
+        jobs=args.jobs,
+        caption_style=args.caption_style,
+        progress_bar=not args.no_progress_bar,
+        whisper_model=args.whisper_model,
+        brand=BrandKit.load(args.brand) if args.brand else None,
+        concepts_file=args.from_concepts,
     )
 
-    captions = None
-    if args.voiceover:
-        from .transcribe.engine import transcribe
+    if args.concepts_only:
+        from .ai.creative import apply_brand, generate_concepts
 
-        print("🎙️  מתמלל את הקריינות ...")
-        lang = None if args.lang in ("auto", None) else args.lang
-        captions = transcribe(args.voiceover, model_size=args.whisper_model, language=lang)
-        print(f"   {len(captions)} מקטעי כתוביות")
-
-    out_dir = Path(args.out)
-    out_dir.mkdir(parents=True, exist_ok=True)
-    (out_dir / f"{profile.username}_concepts.json").write_text(
-        concepts_to_json(concepts), encoding="utf-8"
-    )
-
-    outputs = []
-    for i, concept in enumerate(concepts, start=1):
-        path = out_dir / f"{profile.username}_{concept.slug}.mp4"
-        print(f"🎬 ({i}/{len(concepts)}) מרנדר: {concept.title} → {path.name}")
-        build_reel(
-            profile,
-            concept,
-            path,
-            voiceover=args.voiceover,
-            captions=captions,
-            music=args.music,
-            size=(args.width, args.height),
+        print(f"🧠 בונה {args.count} קונספטים ל-{profile.display_name} ...")
+        concepts = apply_brand(
+            generate_concepts(profile, count=args.count, language=args.lang,
+                              use_ai=not args.no_ai, use_vision=not args.no_vision,
+                              tone=args.tone),
+            options.brand,
         )
-        outputs.append((path, concept))
+        options.out_dir.mkdir(parents=True, exist_ok=True)
+        path = options.out_dir / f"{profile.username}_concepts.json"
+        path.write_text(concepts_to_json(concepts), encoding="utf-8")
+        print(f"📝 הקונספטים נשמרו לעריכה: {path}")
+        print(f"   אחרי העריכה: python -m vdai generate ... --from-concepts {path}")
+        return 0
+
+    outputs = run_generation(profile, options, on_step=lambda msg: print(f"▸ {msg}"))
 
     print("\n✅ מוכן! קבצים שנוצרו:")
-    for path, concept in outputs:
-        print(f"   {path}")
-        print(f"     קופי לפוסט: {concept.caption}")
-        print(f"     האשטגים: {' '.join(concept.hashtags)}")
+    for output in outputs:
+        print(f"   🎬 {output.video}")
+        if output.cover:
+            print(f"      קאבר: {output.cover.name}")
+        if output.package:
+            print(f"      חבילת פרסום: {output.package.name}")
+        print(f"      קופי: {output.concept.caption}")
+        print(f"      האשטגים: {' '.join(output.concept.hashtags)}")
     return 0
 
 
@@ -200,7 +237,7 @@ def _cmd_transcribe(args) -> int:
 
         out = args.out or str(Path(args.burn).with_stem(Path(args.burn).stem + "_captioned"))
         print(f"🎬 צורב כתוביות אל {out} ...")
-        burn_captions(args.burn, captions, out)
+        burn_captions(args.burn, captions, out, style=args.caption_style)
         print(f"✅ נשמר: {out}")
     elif args.out:
         print("שימו לב: --out רלוונטי רק יחד עם --burn")

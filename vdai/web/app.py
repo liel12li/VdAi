@@ -1,6 +1,6 @@
 """Local web UI: submit a business (Instagram username or uploaded media),
-get back rendered reels + post copy. Jobs run in background threads and are
-polled by the page.
+get back rendered reels + covers + publish packages. Jobs run in background
+threads and are polled by the page.
 """
 
 from __future__ import annotations
@@ -14,11 +14,11 @@ from pathlib import Path
 from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse
 
-from ..config import settings
+from ..config import FORMAT_PRESETS, settings
 
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="VdAi", version="0.1.0")
+app = FastAPI(title="VdAi", version="0.2.0")
 
 _JOBS: dict[str, dict] = {}
 _JOBS_LOCK = threading.Lock()
@@ -35,7 +35,10 @@ def index() -> str:
 def status():
     from ..instagram.auth import configured_username
 
-    return {"instagram_user": configured_username(settings.cache_dir)}
+    return {
+        "instagram_user": configured_username(settings.cache_dir),
+        "formats": list(FORMAT_PRESETS),
+    }
 
 
 @app.post("/api/jobs")
@@ -46,6 +49,12 @@ async def create_job(
     bio: str = Form(""),
     count: int = Form(3),
     lang: str = Form("auto"),
+    tone: str = Form("auto"),
+    fmt: str = Form("reel"),
+    tts: bool = Form(False),
+    tts_gender: str = Form("female"),
+    draft: bool = Form(False),
+    caption_style: str = Form("pill"),
     use_ai: bool = Form(True),
     media: list[UploadFile] = File(default=[]),
     voiceover: UploadFile | None = File(default=None),
@@ -74,10 +83,14 @@ async def create_job(
     with _JOBS_LOCK:
         _JOBS[job_id] = {"status": "queued", "step": "ממתין בתור...", "outputs": [], "error": None}
 
-    background.add_task(
-        _run_job, job_id, username, name, bio, count, lang, use_ai,
-        str(media_dir) if media_dir else None, voice_path, music_path,
-    )
+    params = {
+        "username": username, "name": name, "bio": bio, "count": count,
+        "lang": lang, "tone": tone, "fmt": fmt, "tts": tts and not voice_path,
+        "tts_gender": tts_gender, "draft": draft, "caption_style": caption_style,
+        "use_ai": use_ai, "media_dir": str(media_dir) if media_dir else None,
+        "voice_path": voice_path, "music_path": music_path,
+    }
+    background.add_task(_run_job, job_id, params)
     return {"job_id": job_id}
 
 
@@ -112,50 +125,59 @@ def _set(job_id: str, **fields) -> None:
         _JOBS[job_id].update(fields)
 
 
-def _run_job(job_id, username, name, bio, count, lang, use_ai, media_dir, voice_path, music_path):
-    from ..ai.creative import generate_concepts
+def _run_job(job_id: str, p: dict) -> None:
     from ..instagram.fetcher import fetch_profile, load_local_profile
-    from ..video.builder import build_reel
+    from ..pipeline import GenerationOptions, run_generation
 
     try:
         out_dir = settings.cache_dir / "jobs" / job_id / "out"
         out_dir.mkdir(parents=True, exist_ok=True)
 
-        if media_dir:
-            profile = load_local_profile(media_dir, username=username or name or "my_business",
-                                         full_name=name, biography=bio)
+        if p["media_dir"]:
+            profile = load_local_profile(
+                p["media_dir"], username=p["username"] or p["name"] or "my_business",
+                full_name=p["name"], biography=p["bio"],
+            )
         else:
-            _set(job_id, status="running", step=f"מוריד נתונים מ-@{username}...")
-            profile = fetch_profile(username, cache_dir=settings.cache_dir)
+            _set(job_id, status="running", step=f"מוריד נתונים מ-@{p['username']}...")
+            profile = fetch_profile(p["username"], cache_dir=settings.cache_dir)
 
-        _set(job_id, status="running", step="Claude בונה קונספטים...")
-        concepts = generate_concepts(profile, count=count, language=lang, use_ai=use_ai)
+        options = GenerationOptions(
+            count=p["count"],
+            language=p["lang"],
+            use_ai=p["use_ai"],
+            tone=p["tone"],
+            formats=[p["fmt"]],
+            draft=p["draft"],
+            voiceover=p["voice_path"],
+            tts=p["tts"],
+            tts_gender=p["tts_gender"],
+            music=p["music_path"],
+            out_dir=out_dir,
+            package=True,
+            caption_style=p["caption_style"],
+        )
 
-        captions = None
-        if voice_path:
-            _set(job_id, step="מתמלל את הקריינות (Whisper)...")
-            from ..transcribe.engine import transcribe
+        def on_step(msg: str) -> None:
+            _set(job_id, status="running", step=msg)
 
-            whisper_lang = None if lang in ("auto", "", None) else lang
-            captions = transcribe(voice_path, model_size=settings.whisper_model,
-                                  language=whisper_lang)
+        results = run_generation(profile, options, on_step=on_step)
 
-        outputs = []
-        for i, concept in enumerate(concepts, start=1):
-            _set(job_id, step=f"מרנדר סרטון {i}/{len(concepts)}: {concept.title}")
-            path = out_dir / f"{profile.username}_{concept.slug}.mp4"
-            build_reel(profile, concept, path, voiceover=voice_path,
-                       captions=captions, music=music_path)
-            outputs.append({
-                "file": path.name,
-                "url": f"/api/jobs/{job_id}/files/{path.name}",
-                "title": concept.title,
-                "caption": concept.caption,
-                "hashtags": concept.hashtags,
-            })
-            _set(job_id, outputs=outputs)
-
-        _set(job_id, status="done", step="הסתיים ✓")
+        base = f"/api/jobs/{job_id}/files"
+        outputs = [
+            {
+                "file": r.video.name,
+                "url": f"{base}/{r.video.name}",
+                "cover_url": f"{base}/{r.cover.name}" if r.cover else None,
+                "zip_url": f"{base}/{r.package.name}" if r.package else None,
+                "title": r.concept.title,
+                "caption": r.concept.caption,
+                "hashtags": r.concept.hashtags,
+                "narration": r.concept.narration,
+            }
+            for r in results
+        ]
+        _set(job_id, status="done", step="הסתיים ✓", outputs=outputs)
     except Exception as exc:  # noqa: BLE001 - job boundary
         logger.exception("Job %s failed", job_id)
         _set(job_id, status="error", error=str(exc), step="שגיאה")

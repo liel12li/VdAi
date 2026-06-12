@@ -59,6 +59,11 @@ _CONCEPTS_SCHEMA = {
                     "hashtags": {"type": "array", "items": {"type": "string"}},
                     "music_mood": {"type": "string", "enum": MOODS},
                     "style": {"type": "string", "enum": STYLES},
+                    "narration": {
+                        "type": "string",
+                        "description": "Spoken voiceover script, 25-45 words, "
+                                       "natural conversational tone, same language",
+                    },
                 },
                 "required": [
                     "slug",
@@ -70,6 +75,7 @@ _CONCEPTS_SCHEMA = {
                     "hashtags",
                     "music_mood",
                     "style",
+                    "narration",
                 ],
                 "additionalProperties": False,
             },
@@ -100,8 +106,20 @@ Rules:
 - duration per scene: between 1.8 and 4.0 seconds.
 - Captions: 1-3 short sentences + a question or CTA, then 5-10 hashtags
   relevant to the business and locale.
+- narration: a 25-45 word spoken script for a voiceover artist — natural,
+  conversational, matching the concept's flow (hook → value → CTA).
+- When images of the actual media are attached, ground every text in what is
+  really visible; pick media_index values that best fit each line.
 - Never invent facts (prices, addresses, claims) that are not in the profile.
 """
+
+TONES = {
+    "warm": "Warm and personal, like a trusted neighborhood business",
+    "luxury": "Premium and elegant; understated confidence, no exclamation marks",
+    "energetic": "High-energy and punchy; strong verbs, urgency",
+    "young": "Playful and trendy, light slang appropriate for social media",
+    "professional": "Credible and expert; clear value, no fluff",
+}
 
 
 def detect_language(profile: BusinessProfile, requested: str = "auto") -> str:
@@ -119,15 +137,50 @@ def generate_concepts(
     count: int = 3,
     language: str = "auto",
     use_ai: bool = True,
+    use_vision: bool = True,
+    tone: str = "auto",
 ) -> list[ReelConcept]:
     """Return ``count`` reel concepts for the profile."""
     lang = detect_language(profile, language)
     if use_ai and os.environ.get("ANTHROPIC_API_KEY"):
         try:
-            return _claude_concepts(profile, count, lang)
+            return _claude_concepts(profile, count, lang, use_vision, tone)
         except Exception as exc:  # noqa: BLE001 - always deliver something
             logger.warning("Claude concept generation failed (%s); using templates", exc)
     return template_concepts(profile, count, lang)
+
+
+def _image_blocks(profile: BusinessProfile, max_images: int = 8) -> list[dict]:
+    """Downscaled base64 JPEGs of the profile's photos for Claude vision."""
+    import base64
+    import io
+    from pathlib import Path
+
+    from PIL import Image
+
+    blocks: list[dict] = []
+    for i, post in enumerate(profile.posts):
+        if len(blocks) >= max_images * 2:  # text label + image per item
+            break
+        if post.is_video or not Path(post.media_path).exists():
+            continue
+        try:
+            img = Image.open(post.media_path).convert("RGB")
+        except Exception:  # noqa: BLE001 - unreadable file, skip
+            continue
+        img.thumbnail((512, 512))
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG", quality=80)
+        blocks.append({"type": "text", "text": f"media [{i}]:"})
+        blocks.append({
+            "type": "image",
+            "source": {
+                "type": "base64",
+                "media_type": "image/jpeg",
+                "data": base64.standard_b64encode(buf.getvalue()).decode(),
+            },
+        })
+    return blocks
 
 
 def _media_inventory(profile: BusinessProfile) -> str:
@@ -140,11 +193,20 @@ def _media_inventory(profile: BusinessProfile) -> str:
     return "\n".join(lines)
 
 
-def _claude_concepts(profile: BusinessProfile, count: int, lang: str) -> list[ReelConcept]:
+def _claude_concepts(
+    profile: BusinessProfile,
+    count: int,
+    lang: str,
+    use_vision: bool = True,
+    tone: str = "auto",
+) -> list[ReelConcept]:
     import anthropic
 
     client = anthropic.Anthropic()
     lang_name = {"he": "Hebrew", "en": "English"}.get(lang, lang)
+    tone_line = (
+        f"\nBrand tone of voice: {TONES[tone]}." if tone in TONES else ""
+    )
 
     user_prompt = f"""\
 Business profile:
@@ -157,16 +219,22 @@ Business profile:
 
 Available media ({len(profile.posts)} items):
 {_media_inventory(profile)}
-
+{tone_line}
 Create exactly {count} distinct reel concepts in {lang_name}.
 """
+
+    content: list[dict] = [{"type": "text", "text": user_prompt}]
+    if use_vision:
+        images = _image_blocks(profile)
+        if images:
+            content += [{"type": "text", "text": "The actual media items:"}] + images
 
     response = client.messages.create(
         model=settings.anthropic_model,
         max_tokens=16000,
         thinking={"type": "adaptive"},
         system=_SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": user_prompt}],
+        messages=[{"role": "user", "content": content}],
         output_config={"format": {"type": "json_schema", "schema": _CONCEPTS_SCHEMA}},
     )
 
@@ -189,6 +257,7 @@ Create exactly {count} distinct reel concepts in {lang_name}.
             music_mood=c["music_mood"],
             style=c["style"],
             language=lang,
+            narration=c.get("narration", ""),
         )
         for c in raw
     ]
@@ -335,11 +404,16 @@ def template_concepts(
             for j, line in enumerate(tpl["scenes"])
         ]
         hashtags = _default_hashtags(profile, language)
+        hook = tpl["hook"].format(name=profile.display_name)
+        narration = ". ".join(
+            [hook.rstrip(".!?")] + [s.rstrip(".!?") for s in tpl["scenes"]]
+            + [tpl["cta"].rstrip(".!?")]
+        ) + "."
         concepts.append(
             ReelConcept(
                 slug=f"{tpl['slug']}-{offset + i + 1}" if count > len(templates) else tpl["slug"],
                 title=tpl["title"],
-                hook=tpl["hook"].format(name=profile.display_name),
+                hook=hook,
                 scenes=scenes,
                 cta=tpl["cta"],
                 caption=tpl["caption"].format(name=profile.display_name),
@@ -347,8 +421,25 @@ def template_concepts(
                 music_mood=tpl["music_mood"],
                 style=tpl["style"],
                 language=language,
+                narration=narration,
             )
         )
+    return concepts
+
+
+def apply_brand(concepts: list[ReelConcept], brand) -> list[ReelConcept]:
+    """Apply BrandKit overrides (fixed CTA, extra hashtags) to all concepts."""
+    if brand is None:
+        return concepts
+    for concept in concepts:
+        if brand.cta:
+            concept.cta = brand.cta
+        if brand.hashtags:
+            seen = {t.lower() for t in concept.hashtags}
+            concept.hashtags += [
+                t for t in brand.hashtags if t.lower() not in seen
+            ]
+            concept.hashtags = concept.hashtags[:12]
     return concepts
 
 

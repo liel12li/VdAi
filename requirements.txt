@@ -13,6 +13,9 @@ requests>=2.31
 # Transcription (speech-to-text)
 faster-whisper>=1.0
 
+# Automatic voiceover (text-to-speech, free Microsoft voices incl. Hebrew)
+edge-tts>=6.1
+
 # Web UI
 fastapi>=0.110
 uvicorn>=0.29

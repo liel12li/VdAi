@@ -9,7 +9,6 @@ from pathlib import Path
 from moviepy import CompositeVideoClip, ImageClip, VideoFileClip
 
 from ..models import CaptionSegment
-from . import text as textmod
 
 logger = logging.getLogger(__name__)
 
@@ -19,8 +18,11 @@ def burn_captions(
     captions: list[CaptionSegment],
     output_path: str | Path,
     y_ratio: float = 0.78,
+    style: str = "pill",
 ) -> Path:
     """Overlay caption pills on ``video_path`` and write ``output_path``."""
+    from .builder import caption_array
+
     source = VideoFileClip(str(video_path))
     try:
         width, height = source.w, source.h
@@ -28,14 +30,7 @@ def burn_captions(
         for seg in captions:
             if seg.start >= source.duration:
                 break
-            arr = textmod.text_array(
-                seg.text,
-                font_size=max(28, int(height * 0.032)),
-                max_width=int(width * 0.86),
-                pill=True,
-                pill_color=(0, 0, 0, 185),
-                color=(255, 235, 120),
-            )
+            arr = caption_array(seg.text, (width, height), style)
             end = min(seg.end, source.duration)
             layers.append(
                 ImageClip(arr)

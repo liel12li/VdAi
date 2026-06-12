@@ -9,6 +9,26 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 ASSETS_DIR = PROJECT_ROOT / "assets"
 
+# Output format presets: name -> (width, height)
+FORMAT_PRESETS: dict[str, tuple[int, int]] = {
+    "reel": (1080, 1920),      # Reels / Stories / TikTok (9:16)
+    "square": (1080, 1080),    # Feed square (1:1)
+    "portrait": (1080, 1350),  # Feed portrait (4:5)
+    "wide": (1920, 1080),      # YouTube / website (16:9)
+}
+
+
+def format_size(fmt: str, draft: bool = False) -> tuple[int, int]:
+    """Resolve a format name to pixel dimensions (halved in draft mode)."""
+    if fmt not in FORMAT_PRESETS:
+        raise ValueError(
+            f"פורמט לא מוכר: {fmt!r}. אפשרויות: {', '.join(FORMAT_PRESETS)}"
+        )
+    width, height = FORMAT_PRESETS[fmt]
+    if draft:
+        width, height = (width // 2) & ~1, (height // 2) & ~1  # keep even
+    return width, height
+
 
 @dataclass
 class Settings:

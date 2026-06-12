@@ -9,7 +9,7 @@
   * { box-sizing: border-box; }
   body { font-family: "Heebo", "Segoe UI", sans-serif; background: var(--bg); color: var(--ink);
          margin: 0; padding: 24px; }
-  .card { max-width: 720px; margin: 0 auto; background: #fff; border-radius: 18px;
+  .card { max-width: 760px; margin: 0 auto; background: #fff; border-radius: 18px;
           padding: 28px 32px; box-shadow: 0 8px 30px rgba(43,38,32,.08); }
   h1 { margin: 0 0 4px; font-size: 1.7rem; }
   .sub { color: #7a7166; margin: 0 0 24px; }
@@ -18,7 +18,9 @@
     width: 100%; padding: 10px 12px; border: 1px solid #ddd3c4; border-radius: 10px;
     font: inherit; background: #fffdf9; }
   input[type=file] { margin-top: 4px; }
-  .row { display: flex; gap: 16px; } .row > div { flex: 1; }
+  .row { display: flex; gap: 16px; flex-wrap: wrap; } .row > div { flex: 1; min-width: 150px; }
+  .check { display: flex; align-items: center; gap: 8px; margin-top: 14px; font-weight: 600; }
+  .check input { width: 18px; height: 18px; }
   button { margin-top: 22px; width: 100%; padding: 14px; font-size: 1.05rem; font-weight: 700;
            color: #fff; background: var(--accent); border: 0; border-radius: 12px; cursor: pointer; }
   button:disabled { opacity: .55; cursor: wait; }
@@ -26,9 +28,11 @@
   .error { background: #fbe3dd; color: #8c2f17; }
   .out { margin-top: 14px; padding: 14px; border: 1px solid #eee4d4; border-radius: 12px; }
   .out video { width: 100%; max-width: 260px; border-radius: 12px; display: block; margin: 8px 0; }
+  .out .links a { margin-inline-end: 14px; }
   .copybox { background: #faf6ee; border-radius: 8px; padding: 10px; font-size: .92rem;
-             white-space: pre-wrap; }
+             white-space: pre-wrap; margin-top: 8px; }
   .hint { font-size: .85rem; color: #93897c; margin-top: 4px; }
+  details { margin-top: 16px; } summary { cursor: pointer; font-weight: 700; color: #7a7166; }
 </style>
 </head>
 <body>
@@ -52,6 +56,15 @@
         <label>כמה סרטונים?</label>
         <input type="number" name="count" value="3" min="1" max="6">
       </div>
+      <div>
+        <label>פורמט</label>
+        <select name="fmt">
+          <option value="reel">ריל / סטורי (9:16)</option>
+          <option value="square">ריבוע לפיד (1:1)</option>
+          <option value="portrait">פיד אנכי (4:5)</option>
+          <option value="wide">רוחב / יוטיוב (16:9)</option>
+        </select>
+      </div>
     </div>
 
     <label>תיאור קצר של העסק (לא חובה)</label>
@@ -67,13 +80,57 @@
         </select>
       </div>
       <div>
-        <label>קריינות (תתומלל לכתוביות)</label>
-        <input type="file" name="voiceover" accept="audio/*,video/*">
+        <label>טון המותג</label>
+        <select name="tone">
+          <option value="auto">אוטומטי</option>
+          <option value="warm">חם ואישי</option>
+          <option value="luxury">יוקרתי</option>
+          <option value="energetic">אנרגטי</option>
+          <option value="young">צעיר וקליל</option>
+          <option value="professional">מקצועי</option>
+        </select>
+      </div>
+      <div>
+        <label>סגנון כתוביות</label>
+        <select name="caption_style">
+          <option value="pill">קלאסי (רקע כהה)</option>
+          <option value="bold">בולט</option>
+          <option value="minimal">מינימלי</option>
+        </select>
       </div>
     </div>
 
-    <label>מוזיקת רקע (לא חובה)</label>
-    <input type="file" name="music" accept="audio/*">
+    <div class="check">
+      <input type="checkbox" name="tts" id="tts" value="true">
+      <label for="tts" style="margin:0">🎙️ קריינות אוטומטית — התוכנה תכתוב תסריט ותקריא אותו עם כתוביות מסונכרנות</label>
+    </div>
+    <div class="row" id="ttsOpts" style="display:none">
+      <div>
+        <label>קול</label>
+        <select name="tts_gender">
+          <option value="female">נשי</option>
+          <option value="male">גברי</option>
+        </select>
+      </div>
+    </div>
+
+    <details>
+      <summary>אפשרויות נוספות</summary>
+      <div class="row">
+        <div>
+          <label>קריינות מוקלטת (תתומלל לכתוביות)</label>
+          <input type="file" name="voiceover" accept="audio/*,video/*">
+        </div>
+        <div>
+          <label>מוזיקת רקע</label>
+          <input type="file" name="music" accept="audio/*">
+        </div>
+      </div>
+      <div class="check">
+        <input type="checkbox" name="draft" id="draft" value="true">
+        <label for="draft" style="margin:0">⚡ מצב טיוטה — רינדור מהיר באיכות נמוכה לבדיקת כיוון</label>
+      </div>
+    </details>
 
     <button id="go" type="submit">צרו לי סרטונים ✨</button>
   </form>
@@ -89,6 +146,10 @@ fetch('/api/status').then(r => r.json()).then(s => {
     ? `🔓 מחובר לאינסטגרם כ-@${s.instagram_user}`
     : 'מצב אנונימי (פרופילים ציבוריים בלבד). לחיבור חשבון: python -m vdai login';
 }).catch(() => {});
+
+document.getElementById('tts').addEventListener('change', e => {
+  document.getElementById('ttsOpts').style.display = e.target.checked ? 'flex' : 'none';
+});
 
 const form = document.getElementById('form');
 const statusBox = document.getElementById('status');
@@ -131,9 +192,14 @@ function render(outputs) {
   results.innerHTML = outputs.map(o => `
     <div class="out">
       <strong>${o.title}</strong>
-      <video src="${o.url}" controls playsinline></video>
-      <a href="${o.url}" download>⬇️ הורדת הקובץ</a>
+      <video src="${o.url}" controls playsinline poster="${o.cover_url || ''}"></video>
+      <div class="links">
+        <a href="${o.url}" download>⬇️ וידאו</a>
+        ${o.cover_url ? `<a href="${o.cover_url}" download>🖼️ קאבר</a>` : ''}
+        ${o.zip_url ? `<a href="${o.zip_url}" download>📦 חבילת פרסום</a>` : ''}
+      </div>
       <div class="copybox">${o.caption}\n\n${(o.hashtags || []).join(' ')}</div>
+      ${o.narration ? `<div class="copybox">🎙️ ${o.narration}</div>` : ''}
     </div>`).join('');
 }
 </script>
