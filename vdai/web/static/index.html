@@ -4,6 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VdAi — מחולל סרטוני Reels</title>
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" type="image/png" href="/static/icon-192.png">
+<link rel="apple-touch-icon" href="/static/icon-192.png">
+<meta name="theme-color" content="#c96f4a">
 <style>
   :root { --accent: #c96f4a; --bg: #f6f2ea; --ink: #2b2620; }
   * { box-sizing: border-box; }
@@ -33,11 +37,21 @@
              white-space: pre-wrap; margin-top: 8px; }
   .hint { font-size: .85rem; color: #93897c; margin-top: 4px; }
   details { margin-top: 16px; } summary { cursor: pointer; font-weight: 700; color: #7a7166; }
+  .topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .installBtn { width: auto; margin: 0; padding: 9px 14px; font-size: .9rem; font-weight: 700;
+                background: #fff; color: var(--accent); border: 2px solid var(--accent);
+                border-radius: 10px; cursor: pointer; white-space: nowrap; }
+  .installBtn:hover { background: var(--accent); color: #fff; }
 </style>
 </head>
 <body>
 <div class="card">
-  <h1>🎬 VdAi</h1>
+  <div class="topbar">
+    <h1>🎬 VdAi</h1>
+    <button type="button" class="installBtn" id="installBtn" title="יוצר אייקון של VdAi על שולחן העבודה שפותח את התוכנה כמו כל אפליקציה">
+      📥 התקנה על שולחן העבודה
+    </button>
+  </div>
   <p class="sub">מחולל סרטוני Reels פרסומיים — מזינים עסק, מקבלים סרטונים מוכנים לפרסום</p>
 
   <form id="form">
@@ -149,6 +163,23 @@ fetch('/api/status').then(r => r.json()).then(s => {
 
 document.getElementById('tts').addEventListener('change', e => {
   document.getElementById('ttsOpts').style.display = e.target.checked ? 'flex' : 'none';
+});
+
+const installBtn = document.getElementById('installBtn');
+installBtn.addEventListener('click', async () => {
+  installBtn.disabled = true;
+  installBtn.textContent = '⏳ מתקין...';
+  try {
+    const res = await fetch('/api/install-desktop', { method: 'POST' });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'שגיאה');
+    installBtn.textContent = '✅ מותקן!';
+    show(`נוצר קיצור דרך על שולחן העבודה: ${data.path}\nלחיצה כפולה עליו תפתח את VdAi כמו כל אפליקציה.`);
+  } catch (err) {
+    installBtn.textContent = '📥 התקנה על שולחן העבודה';
+    installBtn.disabled = false;
+    show('ההתקנה נכשלה: ' + err.message, true);
+  }
 });
 
 const form = document.getElementById('form');

@@ -115,6 +115,17 @@ def _build_parser() -> argparse.ArgumentParser:
     web.add_argument("--port", type=int, default=8000)
     web.set_defaults(func=_cmd_web)
 
+    # ---- desktop ----
+    desktop = sub.add_parser("desktop", help="פתיחת VdAi כחלון אפליקציה על המחשב")
+    desktop.add_argument("--port", type=int, default=8000)
+    desktop.add_argument("--no-window", action="store_true", help="שרת בלבד, בלי לפתוח חלון")
+    desktop.set_defaults(func=_cmd_desktop)
+
+    install = sub.add_parser(
+        "install-desktop", help="יצירת קיצור דרך של VdAi על שולחן העבודה"
+    )
+    install.set_defaults(func=_cmd_install_desktop)
+
     return parser
 
 
@@ -298,6 +309,22 @@ def _cmd_web(args) -> int:
 
     print(f"🌐 ממשק זמין בכתובת http://{args.host}:{args.port}")
     uvicorn.run(app, host=args.host, port=args.port, log_level="warning")
+    return 0
+
+
+def _cmd_desktop(args) -> int:
+    from .desktop import launch
+
+    launch(port=args.port, open_window=not args.no_window)
+    return 0
+
+
+def _cmd_install_desktop(args) -> int:
+    from .desktop import create_desktop_shortcut
+
+    path = create_desktop_shortcut()
+    print(f"✅ נוצר קיצור דרך על שולחן העבודה: {path}")
+    print("   לחיצה כפולה עליו תפתח את VdAi כמו כל אפליקציה.")
     return 0
 
 

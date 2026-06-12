@@ -12,7 +12,8 @@ import uuid
 from pathlib import Path
 
 from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from ..config import FORMAT_PRESETS, settings
 
@@ -24,11 +25,43 @@ _JOBS: dict[str, dict] = {}
 _JOBS_LOCK = threading.Lock()
 
 STATIC_DIR = Path(__file__).parent / "static"
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
 @app.get("/", response_class=HTMLResponse)
 def index() -> str:
     return (STATIC_DIR / "index.html").read_text(encoding="utf-8")
+
+
+@app.get("/manifest.json")
+def manifest() -> JSONResponse:
+    return JSONResponse({
+        "name": "VdAi — מחולל סרטוני Reels",
+        "short_name": "VdAi",
+        "start_url": "/",
+        "display": "standalone",
+        "dir": "rtl",
+        "lang": "he",
+        "background_color": "#f6f2ea",
+        "theme_color": "#c96f4a",
+        "icons": [
+            {"src": "/static/icon-192.png", "sizes": "192x192", "type": "image/png"},
+            {"src": "/static/icon-512.png", "sizes": "512x512", "type": "image/png"},
+        ],
+    })
+
+
+@app.post("/api/install-desktop")
+def install_desktop():
+    """Create a VdAi shortcut on this machine's Desktop (local app usage)."""
+    from ..desktop import create_desktop_shortcut
+
+    try:
+        path = create_desktop_shortcut()
+    except Exception as exc:  # noqa: BLE001 - surface a friendly error
+        logger.exception("Desktop shortcut installation failed")
+        raise HTTPException(500, f"ההתקנה נכשלה: {exc}") from exc
+    return {"path": str(path)}
 
 
 @app.get("/api/status")
