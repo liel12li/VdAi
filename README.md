@@ -26,16 +26,42 @@
 5. **מוכן לפרסום** — לכל סרטון: תמונת קאבר, קובץ קופי+האשטגים, SRT,
    והכל ארוז ב-zip אחד עם `--package`.
 
-## 🚀 התקנה
+## 🚀 התקנה והפעלה (חשוב!)
 
 דרישות: Python 3.10+ (אין צורך להתקין ffmpeg — מגיע אוטומטית).
 
+**שלב 1 — התקנת הספריות (פעם אחת):** פותחים טרמינל בתיקיית הפרויקט ומריצים:
+
 ```bash
-git clone https://github.com/liel12li/VdAi.git
-cd VdAi
 pip install -r requirements.txt
-export ANTHROPIC_API_KEY=sk-ant-...   # מומלץ; בלעדיו עובדים עם תבניות
 ```
+
+**שלב 2 — הפעלה:** מריצים את הקובץ **`run.py`** (לא קבצים אחרים!):
+
+```bash
+python run.py            # פותח את האפליקציה כחלון
+python run.py web        # ממשק ווב בדפדפן
+```
+
+> 💡 **ב-VS Code:** פתחו את `run.py` ולחצו על הכפתור הירוק ▶. **אל תריצו את
+> הקבצים שבתוך תיקיית `vdai/`** (כמו `cli.py`) ישירות — הם חלק מחבילה ולכן
+> ייתנו שגיאת `attempted relative import`. תמיד מריצים את `run.py`, או
+> `python -m vdai` מתיקיית הפרויקט.
+>
+> **דאבל-קליק:** ב-Windows יש את `הפעלה-VdAi.bat`, ב-Mac את
+> `start-VdAi.command` — דאבל-קליק עליהם פותח את האפליקציה ישר.
+
+**מפתח Claude (מומלץ):** `export ANTHROPIC_API_KEY=sk-ant-...` (ב-Windows:
+`set ANTHROPIC_API_KEY=sk-ant-...`). בלעדיו התוכנה עובדת עם תבניות מובנות.
+
+<details>
+<summary>התקנה כפקודת מערכת (אופציונלי)</summary>
+
+```bash
+pip install -e .      # יוצר פקודה גלובלית בשם vdai
+vdai web              # מעכשיו אפשר מכל מקום
+```
+</details>
 
 ## 🔐 חיבור חשבון אינסטגרם (מומלץ)
 

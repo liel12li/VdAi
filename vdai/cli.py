@@ -16,6 +16,15 @@ import logging
 import sys
 from pathlib import Path
 
+if __package__ in (None, ""):
+    # Allow running this file directly (e.g. the VS Code ▶ "Run" button or a
+    # double-click), not just via ``python -m vdai``. Put the project root on
+    # sys.path and adopt the package name so the relative imports below resolve.
+    import os
+
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    __package__ = "vdai"
+
 from .config import settings
 
 
