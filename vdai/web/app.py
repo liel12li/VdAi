@@ -51,6 +51,36 @@ def manifest() -> JSONResponse:
     })
 
 
+@app.post("/api/instagram/login")
+def instagram_login(username: str = Form(...), password: str = Form(...)):
+    """Step 1 of connecting an Instagram account (password)."""
+    from ..instagram.auth import InstagramAuthError, begin_web_login
+
+    try:
+        return begin_web_login(username, password, settings.cache_dir)
+    except InstagramAuthError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+@app.post("/api/instagram/login/2fa")
+def instagram_login_2fa(login_id: str = Form(...), code: str = Form(...)):
+    """Step 2: submit the two-factor authentication code."""
+    from ..instagram.auth import InstagramAuthError, complete_web_login_2fa
+
+    try:
+        return complete_web_login_2fa(login_id, code, settings.cache_dir)
+    except InstagramAuthError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+@app.post("/api/instagram/logout")
+def instagram_logout():
+    from ..instagram.auth import logout
+
+    removed = logout(settings.cache_dir)
+    return {"removed": len(removed)}
+
+
 @app.post("/api/install-desktop")
 def install_desktop():
     """Create a VdAi shortcut on this machine's Desktop (local app usage)."""

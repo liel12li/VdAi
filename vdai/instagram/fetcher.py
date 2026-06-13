@@ -22,14 +22,17 @@ import re
 from pathlib import Path
 
 from ..models import BusinessProfile, Post
-from .auth import InstagramAuthError, attach_session
+from .auth import InstagramAuthError, attach_session, normalize_username
 
 logger = logging.getLogger(__name__)
 
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp"}
 VIDEO_EXTS = {".mp4", ".mov", ".m4v", ".webm"}
 
-_LOGIN_HINT = "חיבור חשבון משפר את האמינות: python -m vdai login <שם_משתמש_שלכם>"
+_LOGIN_HINT = (
+    "התחברו לחשבון האינסטגרם שלכם בתוך התוכנה (כפתור 'התחברות לאינסטגרם'), "
+    "או העלו תמונות של העסק ידנית."
+)
 
 
 class InstagramFetchError(RuntimeError):
@@ -49,7 +52,14 @@ def fetch_profile(
             "instaloader is not installed. Run: pip install instaloader"
         ) from exc
 
-    username = username.lstrip("@").strip().rstrip("/").split("/")[-1]
+    raw = username
+    username = normalize_username(username)
+    if not username:
+        raise InstagramFetchError(
+            f"לא הצלחתי לזהות שם משתמש מתוך {raw!r}. הדביקו את הקישור לעמוד "
+            "(למשל https://instagram.com/cafe_dizengoff) או את השם אחרי ה-@. "
+            "אם הדבקתם קישור לפוסט בודד — הדביקו במקום זה את הקישור לעמוד עצמו."
+        )
     target_dir = Path(cache_dir) / "instagram" / username
     target_dir.mkdir(parents=True, exist_ok=True)
 
@@ -72,7 +82,18 @@ def fetch_profile(
     try:
         profile = instaloader.Profile.from_username(loader.context, username)
     except instaloader.exceptions.ProfileNotExistsException as exc:
-        raise InstagramFetchError(f"הפרופיל @{username} לא נמצא") from exc
+        if not viewer:
+            # Anonymous requests are very often rejected with a false
+            # "not found" — Instagram now requires login for most access.
+            raise InstagramFetchError(
+                f"לא הצלחתי למצוא את @{username}. כדאי לבדוק שהשם נכון (בדיוק כמו "
+                f"שמופיע באינסטגרם), אבל לרוב הסיבה היא שאינסטגרם חוסם גישה ללא "
+                f"התחברות. {_LOGIN_HINT}"
+            ) from exc
+        raise InstagramFetchError(
+            f"הפרופיל @{username} לא נמצא. בדקו שהשם מדויק (כמו שמופיע באינסטגרם, "
+            "בלי רווחים)."
+        ) from exc
     except instaloader.exceptions.LoginRequiredException as exc:
         raise InstagramFetchError(
             f"אינסטגרם דורש התחברות כדי לצפות ב-@{username}. {_LOGIN_HINT}"

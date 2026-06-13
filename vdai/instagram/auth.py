@@ -14,15 +14,47 @@ from __future__ import annotations
 
 import logging
 import os
+import re
+import uuid
 from pathlib import Path
+from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
 
 SESSION_PREFIX = "session-"
 
+# Path segments that are not usernames (post/reel/story links, etc.)
+_RESERVED_SEGMENTS = {
+    "p", "reel", "reels", "tv", "stories", "explore", "accounts",
+    "directory", "about", "legal", "developer",
+}
+
 
 class InstagramAuthError(RuntimeError):
     pass
+
+
+def normalize_username(raw: str) -> str:
+    """Extract a bare Instagram handle from whatever the user pasted.
+
+    Accepts a plain handle, ``@handle``, or any instagram.com URL
+    (with or without scheme, trailing slash, query string, or sub-path
+    like ``/reels``). Returns ``""`` if no handle can be found (e.g. the
+    user pasted a post link such as ``/p/ABC123/``).
+    """
+    text = (raw or "").strip()
+    if not text:
+        return ""
+    if "instagram.com" in text.lower():
+        if not re.match(r"^https?://", text, re.IGNORECASE):
+            text = "https://" + text
+        segments = [s for s in urlparse(text).path.split("/") if s]
+        text = segments[0] if segments else ""
+    text = text.lstrip("@").strip().strip("/")
+    text = text.split("?")[0].split("#")[0].lower()
+    if text in _RESERVED_SEGMENTS:
+        return ""
+    return re.sub(r"[^a-z0-9._]", "", text)
 
 
 def sessions_dir(cache_dir: str | Path) -> Path:
@@ -34,7 +66,7 @@ def session_file(cache_dir: str | Path, username: str) -> Path:
 
 
 def _norm(username: str) -> str:
-    return username.lstrip("@").strip().lower()
+    return normalize_username(username) or username.lstrip("@").strip().lower()
 
 
 def configured_username(cache_dir: str | Path) -> str | None:
@@ -145,6 +177,65 @@ def _save(loader, username: str, cache_dir: str | Path) -> Path:
         pass
     logger.info("Instagram session of @%s saved to %s", username, path)
     return path
+
+
+# --------------------------------------------------------------------------
+# Two-step login flow for the web UI (password, then a 2FA code if needed)
+# --------------------------------------------------------------------------
+
+# login_id -> (loader, username, cache_dir). Held in memory between the
+# password step and the 2FA-code step.
+_PENDING_2FA: dict[str, tuple] = {}
+
+
+def begin_web_login(username: str, password: str, cache_dir: str | Path) -> dict:
+    """Start a login. Returns {"status": "ok"} or {"status": "2fa", ...}."""
+    import instaloader
+
+    username = normalize_username(username)
+    if not username:
+        raise InstagramAuthError("הזינו שם משתמש אינסטגרם")
+    if not password:
+        raise InstagramAuthError("הזינו סיסמה")
+
+    loader = instaloader.Instaloader(quiet=True)
+    try:
+        loader.login(username, password)
+    except instaloader.exceptions.TwoFactorAuthRequiredException:
+        login_id = uuid.uuid4().hex
+        _PENDING_2FA[login_id] = (loader, username, str(cache_dir))
+        return {"status": "2fa", "login_id": login_id, "username": username}
+    except instaloader.exceptions.BadCredentialsException as exc:
+        raise InstagramAuthError("שם המשתמש או הסיסמה שגויים") from exc
+    except instaloader.exceptions.ConnectionException as exc:
+        raise InstagramAuthError(
+            f"אינסטגרם חסם את ההתחברות ({exc}). פתחו את אפליקציית אינסטגרם, "
+            "אשרו שזה אתם ('It was me'), ונסו שוב."
+        ) from exc
+    _save(loader, username, cache_dir)
+    return {"status": "ok", "username": username}
+
+
+def complete_web_login_2fa(login_id: str, code: str, cache_dir: str | Path) -> dict:
+    """Finish a 2FA login started by :func:`begin_web_login`."""
+    import instaloader
+
+    entry = _PENDING_2FA.get(login_id)
+    if entry is None:
+        raise InstagramAuthError("פג תוקף ההתחברות — התחילו שוב")
+    loader, username, _ = entry
+    code = str(code).strip().replace(" ", "").replace("-", "")
+    if not code:
+        raise InstagramAuthError("הזינו את קוד האימות")
+    try:
+        loader.two_factor_login(code)
+    except instaloader.exceptions.BadCredentialsException as exc:
+        raise InstagramAuthError("קוד האימות שגוי — נסו שוב") from exc
+    except instaloader.exceptions.ConnectionException as exc:
+        raise InstagramAuthError(f"אינסטגרם חסם את האימות ({exc}). נסו שוב.") from exc
+    _save(loader, username, cache_dir)
+    _PENDING_2FA.pop(login_id, None)
+    return {"status": "ok", "username": username}
 
 
 def check_session(cache_dir: str | Path) -> tuple[str | None, bool]:

@@ -42,6 +42,15 @@
                 background: #fff; color: var(--accent); border: 2px solid var(--accent);
                 border-radius: 10px; cursor: pointer; white-space: nowrap; }
   .installBtn:hover { background: var(--accent); color: #fff; }
+  .igpanel { margin: 6px 0 18px; padding: 14px 16px; background: #faf6ee;
+             border: 1px solid #eee4d4; border-radius: 12px; }
+  .igpanel-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-weight: 600; }
+  .igpanel-row span { flex: 1; min-width: 140px; }
+  .igpanel input { margin-top: 8px; }
+  .linkbtn { background: none; border: 0; color: var(--accent); font-weight: 700;
+             cursor: pointer; padding: 4px 6px; margin: 0; width: auto; font-size: .92rem; }
+  .linkbtn:hover { text-decoration: underline; }
+  #igMsg { margin-top: 10px; }
 </style>
 </head>
 <body>
@@ -54,11 +63,36 @@
   </div>
   <p class="sub">מחולל סרטוני Reels פרסומיים — מזינים עסק, מקבלים סרטונים מוכנים לפרסום</p>
 
+  <div class="igpanel" id="igPanel">
+    <div class="igpanel-row">
+      <span id="igStatus">בודק חיבור...</span>
+      <button type="button" class="linkbtn" id="igConnectBtn">🔗 התחברות לאינסטגרם</button>
+      <button type="button" class="linkbtn" id="igLogoutBtn" style="display:none">ניתוק</button>
+    </div>
+    <div class="hint">התחברות לחשבון שלכם עוזרת לתוכנה למצוא עמודים (אינסטגרם חוסם חיפוש ללא התחברות).</div>
+
+    <div id="igForm" style="display:none">
+      <div class="row">
+        <div><input type="text" id="igUser" placeholder="שם המשתמש שלכם באינסטגרם"></div>
+        <div><input type="password" id="igPass" placeholder="סיסמה"></div>
+      </div>
+      <div class="hint">🔒 הסיסמה לא נשמרת — רק חיבור מאובטח, מקומית במחשב שלכם.</div>
+      <button type="button" class="installBtn" id="igSubmit" style="width:100%">התחברות</button>
+    </div>
+
+    <div id="ig2fa" style="display:none">
+      <label>קוד אימות דו-שלבי (מהאפליקציה או מ-SMS)</label>
+      <input type="text" id="igCode" inputmode="numeric" placeholder="6 ספרות">
+      <button type="button" class="installBtn" id="ig2faSubmit" style="width:100%">אישור הקוד</button>
+    </div>
+    <div class="status" id="igMsg" style="display:none"></div>
+  </div>
+
   <form id="form">
     <label>עמוד אינסטגרם של העסק</label>
-    <input type="text" name="username" placeholder="לדוגמה: cafe_dizengoff">
-    <div class="hint" id="igStatus"></div>
-    <div class="hint">או במקום זה — העלו תמונות/סרטונים של העסק:</div>
+    <input type="text" name="username" placeholder="cafe_dizengoff או הדביקו קישור מלא לעמוד">
+    <div class="hint">אפשר להדביק את שם המשתמש, עם @, או את כתובת העמוד המלאה מאינסטגרם.</div>
+    <div class="hint" style="margin-top:10px">או במקום זה — העלו תמונות/סרטונים של העסק:</div>
     <input type="file" name="media" multiple accept="image/*,video/*">
 
     <div class="row">
@@ -154,12 +188,96 @@
 </div>
 
 <script>
-fetch('/api/status').then(r => r.json()).then(s => {
-  const el = document.getElementById('igStatus');
-  el.textContent = s.instagram_user
-    ? `🔓 מחובר לאינסטגרם כ-@${s.instagram_user}`
-    : 'מצב אנונימי (פרופילים ציבוריים בלבד). לחיבור חשבון: python -m vdai login';
-}).catch(() => {});
+const ig = {
+  status: document.getElementById('igStatus'),
+  connectBtn: document.getElementById('igConnectBtn'),
+  logoutBtn: document.getElementById('igLogoutBtn'),
+  form: document.getElementById('igForm'),
+  user: document.getElementById('igUser'),
+  pass: document.getElementById('igPass'),
+  submit: document.getElementById('igSubmit'),
+  twofa: document.getElementById('ig2fa'),
+  code: document.getElementById('igCode'),
+  twofaSubmit: document.getElementById('ig2faSubmit'),
+  msg: document.getElementById('igMsg'),
+};
+let loginId = null;
+
+function igShow(msg, isError = false) {
+  ig.msg.style.display = 'block';
+  ig.msg.textContent = msg;
+  ig.msg.className = 'status' + (isError ? ' error' : '');
+}
+
+function refreshIgStatus() {
+  fetch('/api/status').then(r => r.json()).then(s => {
+    if (s.instagram_user) {
+      ig.status.textContent = `🔓 מחובר כ-@${s.instagram_user}`;
+      ig.connectBtn.style.display = 'none';
+      ig.logoutBtn.style.display = 'inline';
+      ig.form.style.display = 'none';
+      ig.twofa.style.display = 'none';
+    } else {
+      ig.status.textContent = '⚪ לא מחובר לאינסטגרם';
+      ig.connectBtn.style.display = 'inline';
+      ig.logoutBtn.style.display = 'none';
+    }
+  }).catch(() => { ig.status.textContent = ''; });
+}
+refreshIgStatus();
+
+ig.connectBtn.addEventListener('click', () => {
+  ig.form.style.display = ig.form.style.display === 'none' ? 'block' : 'none';
+});
+
+ig.submit.addEventListener('click', async () => {
+  ig.submit.disabled = true;
+  igShow('מתחבר...');
+  try {
+    const body = new URLSearchParams({ username: ig.user.value, password: ig.pass.value });
+    const res = await fetch('/api/instagram/login', { method: 'POST', body });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'שגיאה');
+    if (data.status === '2fa') {
+      loginId = data.login_id;
+      ig.form.style.display = 'none';
+      ig.twofa.style.display = 'block';
+      igShow('נשלח קוד אימות — הזינו אותו למטה.');
+    } else {
+      igShow('✅ התחברת בהצלחה!');
+      ig.pass.value = '';
+      refreshIgStatus();
+    }
+  } catch (err) {
+    igShow(err.message, true);
+  } finally {
+    ig.submit.disabled = false;
+  }
+});
+
+ig.twofaSubmit.addEventListener('click', async () => {
+  ig.twofaSubmit.disabled = true;
+  igShow('מאמת...');
+  try {
+    const body = new URLSearchParams({ login_id: loginId, code: ig.code.value });
+    const res = await fetch('/api/instagram/login/2fa', { method: 'POST', body });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'שגיאה');
+    igShow('✅ התחברת בהצלחה!');
+    ig.twofa.style.display = 'none';
+    refreshIgStatus();
+  } catch (err) {
+    igShow(err.message, true);
+  } finally {
+    ig.twofaSubmit.disabled = false;
+  }
+});
+
+ig.logoutBtn.addEventListener('click', async () => {
+  await fetch('/api/instagram/logout', { method: 'POST' });
+  igShow('נותקת מאינסטגרם.');
+  refreshIgStatus();
+});
 
 document.getElementById('tts').addEventListener('change', e => {
   document.getElementById('ttsOpts').style.display = e.target.checked ? 'flex' : 'none';
