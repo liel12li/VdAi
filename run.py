@@ -41,6 +41,7 @@ CORE_DEPS = {
 OPTIONAL_DEPS = {
     "faster_whisper": "faster-whisper>=1.0",
     "edge_tts": "edge-tts>=6.1",
+    "browser_cookie3": "browser_cookie3>=0.19",
 }
 
 

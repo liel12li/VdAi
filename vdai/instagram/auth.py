@@ -208,11 +208,7 @@ def begin_web_login(username: str, password: str, cache_dir: str | Path) -> dict
     except instaloader.exceptions.BadCredentialsException as exc:
         raise InstagramAuthError("שם המשתמש או הסיסמה שגויים") from exc
     except instaloader.exceptions.ConnectionException as exc:
-        raise InstagramAuthError(
-            "אינסטגרם חסם את ההתחברות (כנראה כי זה מכשיר חדש). פתחו את "
-            "אפליקציית אינסטגרם בטלפון, אשרו את ההתחברות ('It was me'), "
-            f"והמתינו דקה לפני ניסיון נוסף.\n(פירוט: {exc})"
-        ) from exc
+        raise InstagramAuthError(_format_connection_error(exc)) from exc
     except instaloader.exceptions.InstaloaderException as exc:
         raise InstagramAuthError(
             f"ההתחברות נכשלה: {exc}. נסו שוב, ואם זה חוזר — אשרו את ההתחברות "
@@ -225,6 +221,98 @@ def begin_web_login(username: str, password: str, cache_dir: str | Path) -> dict
         ) from exc
     _save(loader, username, cache_dir)
     return {"status": "ok", "username": username}
+
+
+def _format_connection_error(exc: Exception) -> str:
+    """Turn instaloader's connection/checkpoint errors into clear guidance."""
+    text = str(exc)
+    if "checkpoint" in text.lower() or "/auth_platform" in text or "challenge" in text.lower():
+        return (
+            "אינסטגרם דורש אישור התחברות ממכשיר חדש (Checkpoint). הדרך הקלה "
+            "והאמינה: היכנסו לאינסטגרם בדפדפן הרגיל שלכם (Chrome/Edge/Firefox), "
+            "ואז לחצו כאן על «התחברות דרך הדפדפן» — זה עוקף את החסימה לגמרי.\n"
+            f"(פירוט אינסטגרם: {text})"
+        )
+    return (
+        "אינסטגרם חסם את ההתחברות (כנראה כי זה מכשיר חדש). נסו «התחברות דרך "
+        "הדפדפן», או אשרו את ההתחברות באפליקציית אינסטגרם בטלפון ונסו שוב.\n"
+        f"(פירוט: {text})"
+    )
+
+
+# Browsers browser_cookie3 can read, in order of reliability.
+_BROWSER_LOADERS = ["firefox", "chrome", "edge", "brave", "opera", "chromium"]
+
+
+def import_browser_session(cache_dir: str | Path, browser: str = "auto") -> dict:
+    """Build an Instagram session from cookies of a browser you're logged in to.
+
+    This is the most reliable path: it reuses an already-trusted browser
+    session, sidestepping checkpoints and 2FA entirely.
+    """
+    try:
+        import browser_cookie3
+    except ImportError as exc:  # pragma: no cover
+        raise InstagramAuthError(
+            "החבילה browser_cookie3 חסרה. הריצו: pip install browser_cookie3"
+        ) from exc
+    import instaloader
+
+    browsers = _BROWSER_LOADERS if browser in ("auto", "", None) else [browser]
+    last_err = None
+    for name in browsers:
+        loader_fn = getattr(browser_cookie3, name, None)
+        if loader_fn is None:
+            continue
+        try:
+            cookies = loader_fn(domain_name="instagram.com")
+        except Exception as exc:  # noqa: BLE001 - browser locked / not installed
+            last_err = exc
+            continue
+        username = _session_from_cookies(instaloader, cookies, cache_dir)
+        if username:
+            logger.info("Imported Instagram session of @%s from %s", username, name)
+            return {"status": "ok", "username": username, "browser": name}
+
+    hint = f" ({last_err})" if last_err else ""
+    raise InstagramAuthError(
+        "לא נמצא חיבור פעיל לאינסטגרם באף דפדפן. ודאו שאתם מחוברים לאינסטגרם "
+        "בדפדפן (instagram.com), סגרו והפעילו מחדש את הדפדפן, ונסו שוב." + hint
+    )
+
+
+def login_with_sessionid(sessionid: str, cache_dir: str | Path) -> dict:
+    """Log in using a ``sessionid`` cookie copied from the browser (bulletproof
+    fallback that works even when cookie auto-import is blocked)."""
+    import instaloader
+
+    sessionid = (sessionid or "").strip().strip('"').strip()
+    if not sessionid:
+        raise InstagramAuthError("הדביקו את ערך ה-sessionid")
+    cookies = {"sessionid": sessionid}
+    username = _session_from_cookies(instaloader, cookies, cache_dir)
+    if not username:
+        raise InstagramAuthError(
+            "ה-sessionid לא תקף. ודאו שהעתקתם את הערך המלא מדפדפן שמחובר לאינסטגרם."
+        )
+    return {"status": "ok", "username": username}
+
+
+def _session_from_cookies(instaloader, cookies, cache_dir: str | Path) -> str | None:
+    """Attach cookies to a fresh loader, verify login, and save the session.
+    Returns the logged-in username or None."""
+    loader = instaloader.Instaloader(quiet=True)
+    loader.context._session.cookies.update(cookies)
+    try:
+        username = loader.test_login()
+    except Exception as exc:  # noqa: BLE001 - bad/expired cookies
+        logger.warning("Cookie login test failed: %s", exc)
+        return None
+    if not username:
+        return None
+    loader.context.username = username
+    _save(loader, username, cache_dir)
+    return username
 
 
 def complete_web_login_2fa(login_id: str, code: str, cache_dir: str | Path) -> dict:

@@ -79,6 +79,34 @@ def instagram_login(username: str = Form(...), password: str = Form(...)):
         raise HTTPException(400, f"ההתחברות נכשלה: {exc}") from exc
 
 
+@app.post("/api/instagram/import-browser")
+def instagram_import_browser(browser: str = Form("auto")):
+    """Connect by importing cookies from a browser you're logged into."""
+    from ..instagram.auth import InstagramAuthError, import_browser_session
+
+    try:
+        return import_browser_session(settings.cache_dir, browser)
+    except InstagramAuthError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001 - always JSON
+        logger.exception("Browser import error")
+        raise HTTPException(400, f"הייבוא נכשל: {exc}") from exc
+
+
+@app.post("/api/instagram/login/sessionid")
+def instagram_login_sessionid(sessionid: str = Form(...)):
+    """Connect by pasting a sessionid cookie (bulletproof manual fallback)."""
+    from ..instagram.auth import InstagramAuthError, login_with_sessionid
+
+    try:
+        return login_with_sessionid(sessionid, settings.cache_dir)
+    except InstagramAuthError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001 - always JSON
+        logger.exception("sessionid login error")
+        raise HTTPException(400, f"ההתחברות נכשלה: {exc}") from exc
+
+
 @app.post("/api/instagram/login/2fa")
 def instagram_login_2fa(login_id: str = Form(...), code: str = Form(...)):
     """Step 2: submit the two-factor authentication code."""

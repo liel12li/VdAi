@@ -9,6 +9,7 @@ python-bidi>=0.6
 # Instagram fetching
 instaloader>=4.14
 requests>=2.31
+browser_cookie3>=0.19  # import an Instagram session from the browser
 
 # Transcription (speech-to-text)
 faster-whisper>=1.0

@@ -102,3 +102,87 @@ def test_web_login_two_factor_bad_code(tmp_path, fake_loader):
 def test_complete_2fa_expired_login_id(tmp_path, fake_loader):
     with pytest.raises(auth.InstagramAuthError, match="פג תוקף"):
         auth.complete_web_login_2fa("nonexistent", "123456", tmp_path)
+
+
+# ---- checkpoint message + cookie-based login ----
+
+def test_checkpoint_message_recommends_browser():
+    exc = Exception("Checkpoint required. Point your browser to "
+                    "https://www.instagram.com/auth_platform/codeentry/?x=1 - follow")
+    out = auth._format_connection_error(exc)
+    assert "התחברות דרך הדפדפן" in out
+    assert "auth_platform" in out  # keeps the link for the user
+
+
+def test_generic_connection_message():
+    out = auth._format_connection_error(Exception("temporary failure"))
+    assert "אינסטגרם חסם" in out
+
+
+class _CookieLoader:
+    """Fake loader exercising the cookie session path."""
+    result = "liel_bentabo"
+
+    def __init__(self, *a, **k):
+        self.context = type("Ctx", (), {})()
+        self.context._session = type("S", (), {"cookies": _DummyJar()})()
+        self.context.username = None
+
+    def test_login(self):
+        return type(self).result
+
+    def save_session_to_file(self, filename):
+        from pathlib import Path
+        Path(filename).write_text("session")
+
+
+class _DummyJar:
+    def update(self, cookies):
+        self.cookies = cookies
+
+
+def test_login_with_sessionid_valid(tmp_path, monkeypatch):
+    monkeypatch.setattr(instaloader, "Instaloader", _CookieLoader)
+    result = auth.login_with_sessionid("abc123", tmp_path)
+    assert result == {"status": "ok", "username": "liel_bentabo"}
+    assert auth.session_file(tmp_path, "liel_bentabo").exists()
+
+
+def test_login_with_sessionid_empty(tmp_path):
+    with pytest.raises(auth.InstagramAuthError, match="sessionid"):
+        auth.login_with_sessionid("   ", tmp_path)
+
+
+def test_login_with_sessionid_invalid(tmp_path, monkeypatch):
+    class Bad(_CookieLoader):
+        result = None
+    monkeypatch.setattr(instaloader, "Instaloader", Bad)
+    with pytest.raises(auth.InstagramAuthError, match="לא תקף"):
+        auth.login_with_sessionid("bad", tmp_path)
+
+
+def test_import_browser_session_no_cookies(tmp_path, monkeypatch):
+    import sys
+    import types
+    fake_bc3 = types.ModuleType("browser_cookie3")
+    fake_bc3.firefox = lambda **k: (_ for _ in ()).throw(Exception("no firefox"))
+    fake_bc3.chrome = lambda **k: {}  # empty cookies → test_login returns None
+    monkeypatch.setitem(sys.modules, "browser_cookie3", fake_bc3)
+
+    class NoLogin(_CookieLoader):
+        result = None
+    monkeypatch.setattr(instaloader, "Instaloader", NoLogin)
+    with pytest.raises(auth.InstagramAuthError, match="לא נמצא חיבור פעיל"):
+        auth.import_browser_session(tmp_path)
+
+
+def test_import_browser_session_success(tmp_path, monkeypatch):
+    import sys
+    import types
+    fake_bc3 = types.ModuleType("browser_cookie3")
+    fake_bc3.chrome = lambda **k: {"sessionid": "x"}
+    monkeypatch.setitem(sys.modules, "browser_cookie3", fake_bc3)
+    monkeypatch.setattr(instaloader, "Instaloader", _CookieLoader)
+    result = auth.import_browser_session(tmp_path, browser="chrome")
+    assert result["status"] == "ok"
+    assert result["username"] == "liel_bentabo"

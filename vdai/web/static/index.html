@@ -190,8 +190,25 @@
       <span class="chip off" id="igChip">בודק…</span>
     </div>
     <div class="ig-body">
-      <button class="btn-ig" id="igConnectBtn">🔗 התחברות לאינסטגרם</button>
       <button class="btn-line" id="igLogoutBtn" style="display:none">ניתוק החשבון</button>
+
+      <div id="igMethods">
+        <!-- Recommended: import from browser -->
+        <button class="btn-ig" id="igBrowserBtn">🌐 התחברות דרך הדפדפן (הכי קל)</button>
+        <div class="hint">היכנסו לאינסטגרם בדפדפן הרגיל שלכם, ואז לחצו כאן. עוקף חסימות ואימות דו-שלבי.</div>
+        <div style="margin-top:8px">
+          <select id="igBrowser" style="max-width:220px; display:inline-block">
+            <option value="auto">זיהוי דפדפן אוטומטי</option>
+            <option value="chrome">Chrome</option>
+            <option value="edge">Edge</option>
+            <option value="firefox">Firefox</option>
+            <option value="brave">Brave</option>
+          </select>
+        </div>
+
+        <div style="text-align:center; margin:12px 0; color:var(--muted); font-size:.85rem">— או —</div>
+        <button class="btn-line" id="igConnectBtn" style="display:block">🔑 התחברות עם שם משתמש וסיסמה</button>
+      </div>
 
       <div id="igForm" style="display:none; margin-top:12px">
         <div class="grid">
@@ -209,6 +226,13 @@
       </div>
 
       <div class="msg" id="igMsg"></div>
+
+      <details style="margin-top:10px; border:0; padding:0">
+        <summary style="font-size:.85rem">נתקעתם? התחברות ידנית עם קוד sessionid</summary>
+        <div class="hint">בדפדפן המחובר לאינסטגרם: F12 ← Application ← Cookies ← העתיקו את הערך של <b>sessionid</b> והדביקו כאן.</div>
+        <input type="text" id="igSession" placeholder="הדביקו כאן את ערך ה-sessionid" style="margin-top:8px">
+        <button class="btn-line" id="igSessionBtn" style="margin-top:6px">התחברות עם sessionid</button>
+      </details>
     </div>
   </div>
 
@@ -339,7 +363,11 @@ async function postForm(url, body) {
   return data;
 }
 function msg(el, text, isErr = false) {
-  el.textContent = text; el.className = 'msg show' + (isErr ? ' err' : '');
+  // linkify any URL so checkpoint links are clickable
+  const safe = escapeHtml(text).replace(
+    /(https?:\/\/[^\s]+)/g,
+    '<a href="$1" target="_blank" rel="noopener" style="color:inherit;font-weight:700">$1</a>');
+  el.innerHTML = safe; el.className = 'msg show' + (isErr ? ' err' : '');
 }
 
 // ---- Instagram connection ----
@@ -348,19 +376,44 @@ const ig = {};
   .forEach(k => ig[k.toLowerCase()] = document.getElementById('ig' + k));
 let loginId = null;
 
+const igMethods = document.getElementById('igMethods');
 function refreshIg() {
   fetch('/api/status').then(r => r.json()).then(s => {
     if (s.instagram_user) {
       ig.chip.textContent = '🔓 מחובר כ-@' + s.instagram_user; ig.chip.className = 'chip on';
-      ig.connectbtn.style.display = 'none'; ig.logoutbtn.style.display = 'inline-block';
+      igMethods.style.display = 'none'; ig.logoutbtn.style.display = 'inline-block';
       ig.form.style.display = 'none'; ig['2fa'].style.display = 'none';
     } else {
       ig.chip.textContent = 'לא מחובר'; ig.chip.className = 'chip off';
-      ig.connectbtn.style.display = 'block'; ig.logoutbtn.style.display = 'none';
+      igMethods.style.display = 'block'; ig.logoutbtn.style.display = 'none';
     }
   }).catch(() => { ig.chip.textContent = ''; });
 }
 refreshIg();
+
+// Browser import (recommended)
+document.getElementById('igBrowserBtn').onclick = async () => {
+  const btn = document.getElementById('igBrowserBtn');
+  btn.disabled = true; msg(ig.msg, 'מייבא חיבור מהדפדפן…');
+  try {
+    const data = await postForm('/api/instagram/import-browser',
+      new URLSearchParams({ browser: document.getElementById('igBrowser').value }));
+    msg(ig.msg, '✅ התחברת בהצלחה כ-@' + data.username + '!'); refreshIg();
+  } catch (e) { msg(ig.msg, e.message, true); }
+  finally { btn.disabled = false; }
+};
+
+// sessionid fallback
+document.getElementById('igSessionBtn').onclick = async () => {
+  const btn = document.getElementById('igSessionBtn');
+  btn.disabled = true; msg(ig.msg, 'מתחבר…');
+  try {
+    const data = await postForm('/api/instagram/login/sessionid',
+      new URLSearchParams({ sessionid: document.getElementById('igSession').value }));
+    msg(ig.msg, '✅ התחברת בהצלחה כ-@' + data.username + '!'); refreshIg();
+  } catch (e) { msg(ig.msg, e.message, true); }
+  finally { btn.disabled = false; }
+};
 
 ig.connectbtn.onclick = () => {
   ig.form.style.display = ig.form.style.display === 'none' ? 'block' : 'none';
