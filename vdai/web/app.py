@@ -15,7 +15,7 @@ from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, UploadF
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from ..config import FORMAT_PRESETS, settings
+from ..config import ASSETS_DIR, FORMAT_PRESETS, settings
 
 logger = logging.getLogger(__name__)
 
@@ -27,10 +27,24 @@ _JOBS_LOCK = threading.Lock()
 STATIC_DIR = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
+_FONT_FILE = ASSETS_DIR / "fonts" / "Heebo[wght].ttf"
+
 
 @app.get("/", response_class=HTMLResponse)
 def index() -> str:
     return (STATIC_DIR / "index.html").read_text(encoding="utf-8")
+
+
+@app.get("/font/heebo.ttf")
+def heebo_font():
+    """Serve the bundled Hebrew font so the UI looks the same offline.
+
+    Served outside ``/static`` because the StaticFiles mount there would
+    otherwise shadow this route and 404 (the real file name has brackets).
+    """
+    if _FONT_FILE.exists():
+        return FileResponse(_FONT_FILE, media_type="font/ttf")
+    raise HTTPException(404, "font not bundled")
 
 
 @app.get("/manifest.json")
@@ -60,6 +74,9 @@ def instagram_login(username: str = Form(...), password: str = Form(...)):
         return begin_web_login(username, password, settings.cache_dir)
     except InstagramAuthError as exc:
         raise HTTPException(400, str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001 - always return JSON, never a 500 page
+        logger.exception("Instagram login endpoint error")
+        raise HTTPException(400, f"ההתחברות נכשלה: {exc}") from exc
 
 
 @app.post("/api/instagram/login/2fa")
@@ -71,6 +88,9 @@ def instagram_login_2fa(login_id: str = Form(...), code: str = Form(...)):
         return complete_web_login_2fa(login_id, code, settings.cache_dir)
     except InstagramAuthError as exc:
         raise HTTPException(400, str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001 - always return JSON, never a 500 page
+        logger.exception("Instagram 2FA endpoint error")
+        raise HTTPException(400, f"האימות נכשל: {exc}") from exc
 
 
 @app.post("/api/instagram/logout")

@@ -209,8 +209,19 @@ def begin_web_login(username: str, password: str, cache_dir: str | Path) -> dict
         raise InstagramAuthError("שם המשתמש או הסיסמה שגויים") from exc
     except instaloader.exceptions.ConnectionException as exc:
         raise InstagramAuthError(
-            f"אינסטגרם חסם את ההתחברות ({exc}). פתחו את אפליקציית אינסטגרם, "
-            "אשרו שזה אתם ('It was me'), ונסו שוב."
+            "אינסטגרם חסם את ההתחברות (כנראה כי זה מכשיר חדש). פתחו את "
+            "אפליקציית אינסטגרם בטלפון, אשרו את ההתחברות ('It was me'), "
+            f"והמתינו דקה לפני ניסיון נוסף.\n(פירוט: {exc})"
+        ) from exc
+    except instaloader.exceptions.InstaloaderException as exc:
+        raise InstagramAuthError(
+            f"ההתחברות נכשלה: {exc}. נסו שוב, ואם זה חוזר — אשרו את ההתחברות "
+            "באפליקציית אינסטגרם בטלפון."
+        ) from exc
+    except Exception as exc:  # noqa: BLE001 - never leak a 500 to the UI
+        logger.exception("Unexpected Instagram login error")
+        raise InstagramAuthError(
+            f"ההתחברות נכשלה ({type(exc).__name__}). נסו שוב מאוחר יותר."
         ) from exc
     _save(loader, username, cache_dir)
     return {"status": "ok", "username": username}
@@ -233,6 +244,13 @@ def complete_web_login_2fa(login_id: str, code: str, cache_dir: str | Path) -> d
         raise InstagramAuthError("קוד האימות שגוי — נסו שוב") from exc
     except instaloader.exceptions.ConnectionException as exc:
         raise InstagramAuthError(f"אינסטגרם חסם את האימות ({exc}). נסו שוב.") from exc
+    except instaloader.exceptions.InstaloaderException as exc:
+        raise InstagramAuthError(f"האימות נכשל: {exc}. נסו שוב.") from exc
+    except Exception as exc:  # noqa: BLE001 - never leak a 500 to the UI
+        logger.exception("Unexpected Instagram 2FA error")
+        raise InstagramAuthError(
+            f"האימות נכשל ({type(exc).__name__}). נסו שוב מאוחר יותר."
+        ) from exc
     _save(loader, username, cache_dir)
     _PENDING_2FA.pop(login_id, None)
     return {"status": "ok", "username": username}

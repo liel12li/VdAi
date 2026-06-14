@@ -9,347 +9,467 @@
 <link rel="apple-touch-icon" href="/static/icon-192.png">
 <meta name="theme-color" content="#c96f4a">
 <style>
-  :root { --accent: #c96f4a; --bg: #f6f2ea; --ink: #2b2620; }
+  @font-face {
+    font-family: "Heebo";
+    src: url("/font/heebo.ttf") format("truetype");
+    font-weight: 100 900;
+    font-display: swap;
+  }
+  :root {
+    --accent: #c96f4a; --accent-dark: #a8512f; --accent-soft: #f3e3da;
+    --bg1: #f7f3ec; --bg2: #efe7da; --ink: #2c2620; --muted: #8a7f70;
+    --card: #ffffff; --line: #e9dfce; --field: #fbf8f2;
+    --ig1: #515bd4; --ig2: #8134af; --ig3: #dd2a7b; --ig4: #f58529;
+    --ok: #2f8f5b; --err-bg: #fbe4dd; --err-ink: #9a3418;
+    --radius: 16px; --shadow: 0 10px 40px rgba(44,38,32,.10);
+  }
   * { box-sizing: border-box; }
-  body { font-family: "Heebo", "Segoe UI", sans-serif; background: var(--bg); color: var(--ink);
-         margin: 0; padding: 24px; }
-  .card { max-width: 760px; margin: 0 auto; background: #fff; border-radius: 18px;
-          padding: 28px 32px; box-shadow: 0 8px 30px rgba(43,38,32,.08); }
-  h1 { margin: 0 0 4px; font-size: 1.7rem; }
-  .sub { color: #7a7166; margin: 0 0 24px; }
-  label { display: block; font-weight: 600; margin: 16px 0 6px; }
-  input[type=text], input[type=number], select, textarea {
-    width: 100%; padding: 10px 12px; border: 1px solid #ddd3c4; border-radius: 10px;
-    font: inherit; background: #fffdf9; }
-  input[type=file] { margin-top: 4px; }
-  .row { display: flex; gap: 16px; flex-wrap: wrap; } .row > div { flex: 1; min-width: 150px; }
-  .check { display: flex; align-items: center; gap: 8px; margin-top: 14px; font-weight: 600; }
-  .check input { width: 18px; height: 18px; }
-  button { margin-top: 22px; width: 100%; padding: 14px; font-size: 1.05rem; font-weight: 700;
-           color: #fff; background: var(--accent); border: 0; border-radius: 12px; cursor: pointer; }
-  button:disabled { opacity: .55; cursor: wait; }
-  .status { margin-top: 18px; padding: 14px; border-radius: 12px; background: #f1ece2; display: none; }
-  .error { background: #fbe3dd; color: #8c2f17; }
-  .out { margin-top: 14px; padding: 14px; border: 1px solid #eee4d4; border-radius: 12px; }
-  .out video { width: 100%; max-width: 260px; border-radius: 12px; display: block; margin: 8px 0; }
-  .out .links a { margin-inline-end: 14px; }
-  .copybox { background: #faf6ee; border-radius: 8px; padding: 10px; font-size: .92rem;
-             white-space: pre-wrap; margin-top: 8px; }
-  .hint { font-size: .85rem; color: #93897c; margin-top: 4px; }
-  details { margin-top: 16px; } summary { cursor: pointer; font-weight: 700; color: #7a7166; }
-  .topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-  .installBtn { width: auto; margin: 0; padding: 9px 14px; font-size: .9rem; font-weight: 700;
-                background: #fff; color: var(--accent); border: 2px solid var(--accent);
-                border-radius: 10px; cursor: pointer; white-space: nowrap; }
-  .installBtn:hover { background: var(--accent); color: #fff; }
-  .igpanel { margin: 6px 0 18px; padding: 14px 16px; background: #faf6ee;
-             border: 1px solid #eee4d4; border-radius: 12px; }
-  .igpanel-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-weight: 600; }
-  .igpanel-row span { flex: 1; min-width: 140px; }
-  .igpanel input { margin-top: 8px; }
-  .linkbtn { background: none; border: 0; color: var(--accent); font-weight: 700;
-             cursor: pointer; padding: 4px 6px; margin: 0; width: auto; font-size: .92rem; }
-  .linkbtn:hover { text-decoration: underline; }
-  #igMsg { margin-top: 10px; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: "Heebo", "Segoe UI", system-ui, sans-serif;
+    margin: 0; color: var(--ink); line-height: 1.5;
+    background: radial-gradient(1200px 600px at 100% -10%, #fbeee4 0%, transparent 60%),
+                linear-gradient(160deg, var(--bg1), var(--bg2));
+    min-height: 100vh; padding: 22px 16px 60px;
+  }
+  .wrap { max-width: 820px; margin: 0 auto; }
+
+  /* Header */
+  header { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 22px; }
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .brand img { width: 54px; height: 54px; border-radius: 14px; box-shadow: 0 6px 18px rgba(201,111,74,.35); }
+  .brand h1 { margin: 0; font-size: 1.9rem; font-weight: 800; letter-spacing: -.5px; }
+  .brand p { margin: 2px 0 0; color: var(--muted); font-size: .92rem; }
+  .ghost {
+    border: 1.5px solid var(--line); background: rgba(255,255,255,.7); color: var(--accent-dark);
+    border-radius: 12px; padding: 9px 14px; font: inherit; font-weight: 700; font-size: .86rem;
+    cursor: pointer; white-space: nowrap; transition: .15s; backdrop-filter: blur(4px);
+  }
+  .ghost:hover { background: #fff; border-color: var(--accent); transform: translateY(-1px); }
+  .ghost:disabled { opacity: .6; cursor: wait; }
+
+  /* Cards */
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+          box-shadow: var(--shadow); padding: 22px 24px; margin-bottom: 18px; }
+  .card h2 { margin: 0 0 4px; font-size: 1.12rem; display: flex; align-items: center; gap: 8px; }
+  .card .desc { color: var(--muted); font-size: .9rem; margin: 0 0 16px; }
+
+  /* Instagram card */
+  .igcard { position: relative; overflow: hidden; }
+  .igcard::before {
+    content: ""; position: absolute; inset-block: 0; inset-inline-start: 0; width: 6px;
+    background: linear-gradient(180deg, var(--ig1), var(--ig2), var(--ig3), var(--ig4));
+  }
+  .ig-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .ig-logo { width: 40px; height: 40px; border-radius: 11px; display: grid; place-items: center; color: #fff;
+             background: linear-gradient(135deg, var(--ig4), var(--ig3) 45%, var(--ig2) 80%, var(--ig1)); flex: 0 0 auto; }
+  .ig-logo svg { width: 22px; height: 22px; }
+  .ig-head .t { flex: 1; min-width: 120px; }
+  .ig-head .t b { display: block; font-size: 1.02rem; }
+  .ig-head .t small { color: var(--muted); }
+  .chip { font-size: .82rem; font-weight: 700; padding: 5px 11px; border-radius: 999px; white-space: nowrap; }
+  .chip.off { background: #f0ece4; color: var(--muted); }
+  .chip.on  { background: #e4f3ea; color: var(--ok); }
+  .ig-body { margin-top: 14px; }
+  .btn-ig {
+    width: 100%; border: 0; border-radius: 12px; padding: 13px; font: inherit; font-weight: 800; cursor: pointer;
+    color: #fff; background: linear-gradient(95deg, var(--ig4), var(--ig3) 45%, var(--ig2) 85%, var(--ig1));
+    box-shadow: 0 8px 20px rgba(221,42,123,.28); transition: .15s;
+  }
+  .btn-ig:hover { filter: brightness(1.05); transform: translateY(-1px); }
+  .btn-ig:disabled { opacity: .6; cursor: wait; }
+  .btn-line { background: none; border: 0; color: var(--accent-dark); font: inherit; font-weight: 700;
+              cursor: pointer; padding: 6px 2px; font-size: .9rem; }
+  .btn-line:hover { text-decoration: underline; }
+
+  /* Form */
+  label { display: block; font-weight: 700; margin: 16px 0 7px; font-size: .94rem; }
+  label .opt { color: var(--muted); font-weight: 500; font-size: .85em; }
+  input[type=text], input[type=password], input[type=number], select, textarea {
+    width: 100%; padding: 12px 14px; border: 1.5px solid var(--line); border-radius: 12px;
+    font: inherit; background: var(--field); color: var(--ink); transition: .15s; outline: none;
+  }
+  input:focus, select:focus, textarea:focus { border-color: var(--accent); background: #fff;
+    box-shadow: 0 0 0 4px rgba(201,111,74,.12); }
+  ::placeholder { color: #b6ab9a; }
+  textarea { resize: vertical; min-height: 56px; }
+  .grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+  .hint { font-size: .84rem; color: var(--muted); margin-top: 6px; }
+
+  /* Dropzone */
+  .drop { margin-top: 8px; border: 2px dashed var(--line); border-radius: 14px; padding: 18px;
+          text-align: center; background: var(--field); cursor: pointer; transition: .15s; }
+  .drop:hover, .drop.drag { border-color: var(--accent); background: #fff; }
+  .drop .big { font-size: 1.5rem; }
+  .drop small { color: var(--muted); display: block; margin-top: 4px; }
+  .drop .files { margin-top: 8px; font-weight: 700; color: var(--accent-dark); font-size: .88rem; }
+  .or { display: flex; align-items: center; gap: 12px; color: var(--muted); margin: 16px 0; font-size: .85rem; }
+  .or::before, .or::after { content: ""; height: 1px; background: var(--line); flex: 1; }
+
+  /* Toggle switch */
+  .switch { display: flex; align-items: center; gap: 12px; margin-top: 16px; padding: 12px 14px;
+            background: var(--field); border: 1px solid var(--line); border-radius: 12px; cursor: pointer; }
+  .switch:hover { border-color: var(--accent-soft); }
+  .switch input { display: none; }
+  .track { width: 46px; height: 26px; border-radius: 999px; background: #d9cfc0; position: relative;
+           flex: 0 0 auto; transition: .2s; }
+  .track::after { content: ""; position: absolute; top: 3px; inset-inline-start: 3px; width: 20px; height: 20px;
+                  background: #fff; border-radius: 50%; transition: .2s; box-shadow: 0 1px 3px rgba(0,0,0,.2); }
+  .switch input:checked + .track { background: var(--accent); }
+  .switch input:checked + .track::after { inset-inline-start: 23px; }
+  .switch .lbl b { display: block; } .switch .lbl small { color: var(--muted); }
+
+  details { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 10px; }
+  summary { cursor: pointer; font-weight: 800; color: var(--accent-dark); list-style: none; }
+  summary::-webkit-details-marker { display: none; }
+  summary::before { content: "⚙️ "; }
+
+  .cta { width: 100%; margin-top: 22px; border: 0; border-radius: 14px; padding: 16px; cursor: pointer;
+         color: #fff; font: inherit; font-weight: 800; font-size: 1.12rem;
+         background: linear-gradient(95deg, var(--accent), var(--accent-dark));
+         box-shadow: 0 10px 26px rgba(168,81,47,.34); transition: .15s; }
+  .cta:hover { transform: translateY(-2px); filter: brightness(1.04); }
+  .cta:disabled { opacity: .6; cursor: wait; transform: none; }
+
+  /* Status + messages */
+  .msg { margin-top: 12px; padding: 12px 14px; border-radius: 12px; font-size: .92rem; display: none;
+         background: var(--accent-soft); color: var(--accent-dark); white-space: pre-wrap; }
+  .msg.err { background: var(--err-bg); color: var(--err-ink); }
+  .msg.show { display: block; }
+  .progress { display: none; align-items: center; gap: 12px; margin-top: 14px; }
+  .progress.show { display: flex; }
+  .spinner { width: 22px; height: 22px; border: 3px solid var(--accent-soft); border-top-color: var(--accent);
+             border-radius: 50%; animation: spin 1s linear infinite; flex: 0 0 auto; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Results */
+  .results { display: grid; gap: 16px; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); }
+  .reel { border: 1px solid var(--line); border-radius: 14px; overflow: hidden; background: #fff;
+          box-shadow: 0 6px 18px rgba(44,38,32,.07); display: flex; flex-direction: column; }
+  .reel video { width: 100%; aspect-ratio: 9/16; object-fit: cover; background: #000; display: block; }
+  .reel .body { padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+  .reel .ttl { font-weight: 800; }
+  .reel .copy { background: var(--field); border: 1px solid var(--line); border-radius: 10px; padding: 9px;
+                font-size: .85rem; white-space: pre-wrap; max-height: 120px; overflow: auto; }
+  .reel .acts { display: flex; gap: 8px; flex-wrap: wrap; }
+  .reel .acts a, .reel .acts button { font-size: .82rem; font-weight: 700; text-decoration: none;
+    border: 1.5px solid var(--line); border-radius: 9px; padding: 7px 10px; color: var(--accent-dark);
+    background: #fff; cursor: pointer; }
+  .reel .acts a:hover, .reel .acts button:hover { border-color: var(--accent); }
+  @media (max-width: 540px) { .card { padding: 18px 16px; } .brand h1 { font-size: 1.6rem; } }
 </style>
 </head>
 <body>
-<div class="card">
-  <div class="topbar">
-    <h1>🎬 VdAi</h1>
-    <button type="button" class="installBtn" id="installBtn" title="יוצר אייקון של VdAi על שולחן העבודה שפותח את התוכנה כמו כל אפליקציה">
-      📥 התקנה על שולחן העבודה
-    </button>
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <img src="/static/icon-192.png" alt="VdAi">
+      <div>
+        <h1>VdAi</h1>
+        <p>סרטוני Reels פרסומיים — מעמוד אינסטגרם או מהתמונות שלכם</p>
+      </div>
+    </div>
+    <button class="ghost" id="installBtn" title="יוצר אייקון של VdAi על שולחן העבודה">📥 התקנה למחשב</button>
+  </header>
+
+  <!-- Instagram connection -->
+  <div class="card igcard">
+    <div class="ig-head">
+      <div class="ig-logo">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1.2" fill="currentColor" stroke="none"/>
+        </svg>
+      </div>
+      <div class="t">
+        <b>חיבור לאינסטגרם</b>
+        <small>אינסטגרם חוסם חיפוש ללא התחברות — חברו חשבון כדי שהתוכנה תמצא עמודים.</small>
+      </div>
+      <span class="chip off" id="igChip">בודק…</span>
+    </div>
+    <div class="ig-body">
+      <button class="btn-ig" id="igConnectBtn">🔗 התחברות לאינסטגרם</button>
+      <button class="btn-line" id="igLogoutBtn" style="display:none">ניתוק החשבון</button>
+
+      <div id="igForm" style="display:none; margin-top:12px">
+        <div class="grid">
+          <input type="text" id="igUser" placeholder="שם המשתמש שלכם" autocomplete="username">
+          <input type="password" id="igPass" placeholder="סיסמה" autocomplete="current-password">
+        </div>
+        <div class="hint">🔒 הסיסמה לא נשמרת — נשמר רק חיבור מאובטח, מקומית במחשב שלכם.</div>
+        <button class="btn-ig" id="igSubmit" style="margin-top:12px">התחברות</button>
+      </div>
+
+      <div id="ig2fa" style="display:none; margin-top:12px">
+        <label>קוד אימות דו-שלבי <span class="opt">(מהאפליקציה או מ-SMS)</span></label>
+        <input type="text" id="igCode" inputmode="numeric" placeholder="6 ספרות">
+        <button class="btn-ig" id="ig2faSubmit" style="margin-top:12px">אישור הקוד</button>
+      </div>
+
+      <div class="msg" id="igMsg"></div>
+    </div>
   </div>
-  <p class="sub">מחולל סרטוני Reels פרסומיים — מזינים עסק, מקבלים סרטונים מוכנים לפרסום</p>
 
-  <div class="igpanel" id="igPanel">
-    <div class="igpanel-row">
-      <span id="igStatus">בודק חיבור...</span>
-      <button type="button" class="linkbtn" id="igConnectBtn">🔗 התחברות לאינסטגרם</button>
-      <button type="button" class="linkbtn" id="igLogoutBtn" style="display:none">ניתוק</button>
-    </div>
-    <div class="hint">התחברות לחשבון שלכם עוזרת לתוכנה למצוא עמודים (אינסטגרם חוסם חיפוש ללא התחברות).</div>
+  <!-- Create -->
+  <div class="card">
+    <h2>🎬 יצירת הסרטונים</h2>
+    <p class="desc">בחרו עמוד אינסטגרם או העלו חומרים, והתוכנה תבנה כמה סרטונים מוכנים לפרסום.</p>
+    <form id="form">
+      <label>עמוד אינסטגרם של העסק</label>
+      <input type="text" name="username" placeholder="cafe_dizengoff  ·  או הדביקו קישור מלא לעמוד">
+      <div class="hint">אפשר שם משתמש, עם @, או כתובת עמוד מלאה מאינסטגרם.</div>
 
-    <div id="igForm" style="display:none">
-      <div class="row">
-        <div><input type="text" id="igUser" placeholder="שם המשתמש שלכם באינסטגרם"></div>
-        <div><input type="password" id="igPass" placeholder="סיסמה"></div>
+      <div class="or">או</div>
+
+      <div class="drop" id="drop">
+        <div class="big">📂</div>
+        <strong>העלו תמונות / סרטונים של העסק</strong>
+        <small>גררו לכאן או לחצו לבחירה</small>
+        <div class="files" id="dropFiles"></div>
+        <input type="file" name="media" id="media" multiple accept="image/*,video/*" hidden>
       </div>
-      <div class="hint">🔒 הסיסמה לא נשמרת — רק חיבור מאובטח, מקומית במחשב שלכם.</div>
-      <button type="button" class="installBtn" id="igSubmit" style="width:100%">התחברות</button>
-    </div>
 
-    <div id="ig2fa" style="display:none">
-      <label>קוד אימות דו-שלבי (מהאפליקציה או מ-SMS)</label>
-      <input type="text" id="igCode" inputmode="numeric" placeholder="6 ספרות">
-      <button type="button" class="installBtn" id="ig2faSubmit" style="width:100%">אישור הקוד</button>
-    </div>
-    <div class="status" id="igMsg" style="display:none"></div>
-  </div>
+      <div class="grid">
+        <div>
+          <label>שם העסק <span class="opt">(לא חובה)</span></label>
+          <input type="text" name="name" placeholder="מספרת דנה">
+        </div>
+        <div>
+          <label>כמה סרטונים?</label>
+          <input type="number" name="count" value="3" min="1" max="6">
+        </div>
+        <div>
+          <label>פורמט</label>
+          <select name="fmt">
+            <option value="reel">ריל / סטורי (9:16)</option>
+            <option value="square">ריבוע לפיד (1:1)</option>
+            <option value="portrait">פיד אנכי (4:5)</option>
+            <option value="wide">רוחב / יוטיוב (16:9)</option>
+          </select>
+        </div>
+      </div>
 
-  <form id="form">
-    <label>עמוד אינסטגרם של העסק</label>
-    <input type="text" name="username" placeholder="cafe_dizengoff או הדביקו קישור מלא לעמוד">
-    <div class="hint">אפשר להדביק את שם המשתמש, עם @, או את כתובת העמוד המלאה מאינסטגרם.</div>
-    <div class="hint" style="margin-top:10px">או במקום זה — העלו תמונות/סרטונים של העסק:</div>
-    <input type="file" name="media" multiple accept="image/*,video/*">
+      <label>תיאור קצר של העסק <span class="opt">(לא חובה)</span></label>
+      <textarea name="bio" rows="2" placeholder="מספרה בוטיק בלב תל אביב, מתמחים בצבע ובהחלקות"></textarea>
 
-    <div class="row">
-      <div>
-        <label>שם העסק (לא חובה)</label>
-        <input type="text" name="name" placeholder="מספרת דנה">
+      <div class="grid">
+        <div>
+          <label>שפה</label>
+          <select name="lang">
+            <option value="auto">זיהוי אוטומטי</option>
+            <option value="he">עברית</option>
+            <option value="en">English</option>
+          </select>
+        </div>
+        <div>
+          <label>טון המותג</label>
+          <select name="tone">
+            <option value="auto">אוטומטי</option>
+            <option value="warm">חם ואישי</option>
+            <option value="luxury">יוקרתי</option>
+            <option value="energetic">אנרגטי</option>
+            <option value="young">צעיר וקליל</option>
+            <option value="professional">מקצועי</option>
+          </select>
+        </div>
+        <div>
+          <label>סגנון כתוביות</label>
+          <select name="caption_style">
+            <option value="pill">קלאסי</option>
+            <option value="bold">בולט</option>
+            <option value="minimal">מינימלי</option>
+          </select>
+        </div>
       </div>
-      <div>
-        <label>כמה סרטונים?</label>
-        <input type="number" name="count" value="3" min="1" max="6">
-      </div>
-      <div>
-        <label>פורמט</label>
-        <select name="fmt">
-          <option value="reel">ריל / סטורי (9:16)</option>
-          <option value="square">ריבוע לפיד (1:1)</option>
-          <option value="portrait">פיד אנכי (4:5)</option>
-          <option value="wide">רוחב / יוטיוב (16:9)</option>
-        </select>
-      </div>
-    </div>
 
-    <label>תיאור קצר של העסק (לא חובה)</label>
-    <textarea name="bio" rows="2" placeholder="מספרה בוטיק בלב תל אביב, מתמחים בצבע ובהחלקות"></textarea>
-
-    <div class="row">
-      <div>
-        <label>שפה</label>
-        <select name="lang">
-          <option value="auto">זיהוי אוטומטי</option>
-          <option value="he">עברית</option>
-          <option value="en">English</option>
-        </select>
-      </div>
-      <div>
-        <label>טון המותג</label>
-        <select name="tone">
-          <option value="auto">אוטומטי</option>
-          <option value="warm">חם ואישי</option>
-          <option value="luxury">יוקרתי</option>
-          <option value="energetic">אנרגטי</option>
-          <option value="young">צעיר וקליל</option>
-          <option value="professional">מקצועי</option>
-        </select>
-      </div>
-      <div>
-        <label>סגנון כתוביות</label>
-        <select name="caption_style">
-          <option value="pill">קלאסי (רקע כהה)</option>
-          <option value="bold">בולט</option>
-          <option value="minimal">מינימלי</option>
-        </select>
-      </div>
-    </div>
-
-    <div class="check">
-      <input type="checkbox" name="tts" id="tts" value="true">
-      <label for="tts" style="margin:0">🎙️ קריינות אוטומטית — התוכנה תכתוב תסריט ותקריא אותו עם כתוביות מסונכרנות</label>
-    </div>
-    <div class="row" id="ttsOpts" style="display:none">
-      <div>
-        <label>קול</label>
+      <label class="switch">
+        <input type="checkbox" name="tts" id="tts" value="true">
+        <span class="track"></span>
+        <span class="lbl"><b>🎙️ קריינות אוטומטית</b><small>התוכנה כותבת תסריט, מקריאה אותו ומוסיפה כתוביות מסונכרנות</small></span>
+      </label>
+      <div id="ttsOpts" style="display:none; margin-top:12px">
+        <label>קול הקריינות</label>
         <select name="tts_gender">
           <option value="female">נשי</option>
           <option value="male">גברי</option>
         </select>
       </div>
-    </div>
 
-    <details>
-      <summary>אפשרויות נוספות</summary>
-      <div class="row">
-        <div>
-          <label>קריינות מוקלטת (תתומלל לכתוביות)</label>
-          <input type="file" name="voiceover" accept="audio/*,video/*">
+      <details>
+        <summary>אפשרויות נוספות</summary>
+        <div class="grid" style="margin-top:12px">
+          <div>
+            <label>קריינות מוקלטת שלכם <span class="opt">(תתומלל)</span></label>
+            <input type="file" name="voiceover" accept="audio/*,video/*">
+          </div>
+          <div>
+            <label>מוזיקת רקע</label>
+            <input type="file" name="music" accept="audio/*">
+          </div>
         </div>
-        <div>
-          <label>מוזיקת רקע</label>
-          <input type="file" name="music" accept="audio/*">
-        </div>
-      </div>
-      <div class="check">
-        <input type="checkbox" name="draft" id="draft" value="true">
-        <label for="draft" style="margin:0">⚡ מצב טיוטה — רינדור מהיר באיכות נמוכה לבדיקת כיוון</label>
-      </div>
-    </details>
+        <label class="switch">
+          <input type="checkbox" name="draft" id="draft" value="true">
+          <span class="track"></span>
+          <span class="lbl"><b>⚡ מצב טיוטה</b><small>רינדור מהיר באיכות נמוכה לבדיקת כיוון</small></span>
+        </label>
+      </details>
 
-    <button id="go" type="submit">צרו לי סרטונים ✨</button>
-  </form>
+      <button type="submit" class="cta" id="go">✨ צרו לי סרטונים</button>
+    </form>
 
-  <div id="status" class="status"></div>
-  <div id="results"></div>
+    <div class="progress" id="progress"><div class="spinner"></div><span id="progressTxt"></span></div>
+    <div class="msg" id="status"></div>
+  </div>
+
+  <div class="results" id="results"></div>
 </div>
 
 <script>
-const ig = {
-  status: document.getElementById('igStatus'),
-  connectBtn: document.getElementById('igConnectBtn'),
-  logoutBtn: document.getElementById('igLogoutBtn'),
-  form: document.getElementById('igForm'),
-  user: document.getElementById('igUser'),
-  pass: document.getElementById('igPass'),
-  submit: document.getElementById('igSubmit'),
-  twofa: document.getElementById('ig2fa'),
-  code: document.getElementById('igCode'),
-  twofaSubmit: document.getElementById('ig2faSubmit'),
-  msg: document.getElementById('igMsg'),
-};
+// ---- robust fetch (never throws "Unexpected token" on a non-JSON error) ----
+async function postForm(url, body) {
+  const res = await fetch(url, { method: 'POST', body });
+  const text = await res.text();
+  let data;
+  try { data = text ? JSON.parse(text) : {}; }
+  catch { data = { detail: 'שגיאת שרת לא צפויה. נסו שוב.' }; }
+  if (!res.ok) throw new Error(data.detail || data.error || 'שגיאה');
+  return data;
+}
+function msg(el, text, isErr = false) {
+  el.textContent = text; el.className = 'msg show' + (isErr ? ' err' : '');
+}
+
+// ---- Instagram connection ----
+const ig = {};
+['Chip','ConnectBtn','LogoutBtn','Form','User','Pass','Submit','2fa','Code','2faSubmit','Msg']
+  .forEach(k => ig[k.toLowerCase()] = document.getElementById('ig' + k));
 let loginId = null;
 
-function igShow(msg, isError = false) {
-  ig.msg.style.display = 'block';
-  ig.msg.textContent = msg;
-  ig.msg.className = 'status' + (isError ? ' error' : '');
-}
-
-function refreshIgStatus() {
+function refreshIg() {
   fetch('/api/status').then(r => r.json()).then(s => {
     if (s.instagram_user) {
-      ig.status.textContent = `🔓 מחובר כ-@${s.instagram_user}`;
-      ig.connectBtn.style.display = 'none';
-      ig.logoutBtn.style.display = 'inline';
-      ig.form.style.display = 'none';
-      ig.twofa.style.display = 'none';
+      ig.chip.textContent = '🔓 מחובר כ-@' + s.instagram_user; ig.chip.className = 'chip on';
+      ig.connectbtn.style.display = 'none'; ig.logoutbtn.style.display = 'inline-block';
+      ig.form.style.display = 'none'; ig['2fa'].style.display = 'none';
     } else {
-      ig.status.textContent = '⚪ לא מחובר לאינסטגרם';
-      ig.connectBtn.style.display = 'inline';
-      ig.logoutBtn.style.display = 'none';
+      ig.chip.textContent = 'לא מחובר'; ig.chip.className = 'chip off';
+      ig.connectbtn.style.display = 'block'; ig.logoutbtn.style.display = 'none';
     }
-  }).catch(() => { ig.status.textContent = ''; });
+  }).catch(() => { ig.chip.textContent = ''; });
 }
-refreshIgStatus();
+refreshIg();
 
-ig.connectBtn.addEventListener('click', () => {
+ig.connectbtn.onclick = () => {
   ig.form.style.display = ig.form.style.display === 'none' ? 'block' : 'none';
-});
-
-ig.submit.addEventListener('click', async () => {
-  ig.submit.disabled = true;
-  igShow('מתחבר...');
+};
+ig.submit.onclick = async () => {
+  ig.submit.disabled = true; msg(ig.msg, 'מתחבר…');
   try {
-    const body = new URLSearchParams({ username: ig.user.value, password: ig.pass.value });
-    const res = await fetch('/api/instagram/login', { method: 'POST', body });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || 'שגיאה');
+    const data = await postForm('/api/instagram/login',
+      new URLSearchParams({ username: ig.user.value, password: ig.pass.value }));
     if (data.status === '2fa') {
-      loginId = data.login_id;
-      ig.form.style.display = 'none';
-      ig.twofa.style.display = 'block';
-      igShow('נשלח קוד אימות — הזינו אותו למטה.');
+      loginId = data.login_id; ig.form.style.display = 'none'; ig['2fa'].style.display = 'block';
+      msg(ig.msg, '📲 נשלח קוד אימות — הזינו אותו למטה.');
     } else {
-      igShow('✅ התחברת בהצלחה!');
-      ig.pass.value = '';
-      refreshIgStatus();
+      msg(ig.msg, '✅ התחברת בהצלחה!'); ig.pass.value = ''; refreshIg();
     }
-  } catch (err) {
-    igShow(err.message, true);
-  } finally {
-    ig.submit.disabled = false;
-  }
-});
-
-ig.twofaSubmit.addEventListener('click', async () => {
-  ig.twofaSubmit.disabled = true;
-  igShow('מאמת...');
+  } catch (e) { msg(ig.msg, e.message, true); }
+  finally { ig.submit.disabled = false; }
+};
+ig['2fasubmit'].onclick = async () => {
+  ig['2fasubmit'].disabled = true; msg(ig.msg, 'מאמת…');
   try {
-    const body = new URLSearchParams({ login_id: loginId, code: ig.code.value });
-    const res = await fetch('/api/instagram/login/2fa', { method: 'POST', body });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || 'שגיאה');
-    igShow('✅ התחברת בהצלחה!');
-    ig.twofa.style.display = 'none';
-    refreshIgStatus();
-  } catch (err) {
-    igShow(err.message, true);
-  } finally {
-    ig.twofaSubmit.disabled = false;
-  }
-});
+    await postForm('/api/instagram/login/2fa',
+      new URLSearchParams({ login_id: loginId, code: ig.code.value }));
+    msg(ig.msg, '✅ התחברת בהצלחה!'); ig['2fa'].style.display = 'none'; refreshIg();
+  } catch (e) { msg(ig.msg, e.message, true); }
+  finally { ig['2fasubmit'].disabled = false; }
+};
+ig.logoutbtn.onclick = async () => {
+  try { await postForm('/api/instagram/logout', new URLSearchParams()); } catch {}
+  msg(ig.msg, 'נותקת מאינסטגרם.'); refreshIg();
+};
 
-ig.logoutBtn.addEventListener('click', async () => {
-  await fetch('/api/instagram/logout', { method: 'POST' });
-  igShow('נותקת מאינסטגרם.');
-  refreshIgStatus();
-});
-
-document.getElementById('tts').addEventListener('change', e => {
-  document.getElementById('ttsOpts').style.display = e.target.checked ? 'flex' : 'none';
-});
-
+// ---- Install button ----
 const installBtn = document.getElementById('installBtn');
-installBtn.addEventListener('click', async () => {
-  installBtn.disabled = true;
-  installBtn.textContent = '⏳ מתקין...';
+installBtn.onclick = async () => {
+  installBtn.disabled = true; const orig = installBtn.textContent; installBtn.textContent = '⏳ מתקין…';
   try {
-    const res = await fetch('/api/install-desktop', { method: 'POST' });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || 'שגיאה');
-    installBtn.textContent = '✅ מותקן!';
-    show(`נוצר קיצור דרך על שולחן העבודה: ${data.path}\nלחיצה כפולה עליו תפתח את VdAi כמו כל אפליקציה.`);
-  } catch (err) {
-    installBtn.textContent = '📥 התקנה על שולחן העבודה';
-    installBtn.disabled = false;
-    show('ההתקנה נכשלה: ' + err.message, true);
+    const data = await postForm('/api/install-desktop', new URLSearchParams());
+    installBtn.textContent = '✅ הותקן!';
+    msg(document.getElementById('status'), 'נוצר קיצור על שולחן העבודה:\n' + data.path);
+    document.getElementById('status').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  } catch (e) {
+    installBtn.textContent = orig; installBtn.disabled = false;
+    msg(document.getElementById('status'), 'ההתקנה נכשלה: ' + e.message, true);
   }
-});
+};
 
-const form = document.getElementById('form');
-const statusBox = document.getElementById('status');
-const results = document.getElementById('results');
-const go = document.getElementById('go');
+// ---- TTS toggle ----
+document.getElementById('tts').onchange = e =>
+  document.getElementById('ttsOpts').style.display = e.target.checked ? 'block' : 'none';
 
-form.addEventListener('submit', async (e) => {
+// ---- Dropzone ----
+const drop = document.getElementById('drop'), media = document.getElementById('media'),
+      dropFiles = document.getElementById('dropFiles');
+drop.onclick = () => media.click();
+media.onchange = () => {
+  dropFiles.textContent = media.files.length ? `נבחרו ${media.files.length} קבצים` : '';
+};
+['dragover','dragenter'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('drag'); }));
+['dragleave','drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('drag'); }));
+drop.addEventListener('drop', e => { media.files = e.dataTransfer.files; media.onchange(); });
+
+// ---- Generate ----
+const form = document.getElementById('form'), go = document.getElementById('go'),
+      results = document.getElementById('results'), statusBox = document.getElementById('status'),
+      progress = document.getElementById('progress'), progressTxt = document.getElementById('progressTxt');
+
+form.onsubmit = async (e) => {
   e.preventDefault();
-  go.disabled = true;
-  results.innerHTML = '';
-  show('שולח את הבקשה...');
+  go.disabled = true; results.innerHTML = ''; statusBox.className = 'msg';
+  progress.classList.add('show'); progressTxt.textContent = 'שולח את הבקשה…';
   try {
-    const res = await fetch('/api/jobs', { method: 'POST', body: new FormData(form) });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || 'שגיאה');
+    const data = await postForm('/api/jobs', new FormData(form));
     poll(data.job_id);
   } catch (err) {
-    show('שגיאה: ' + err.message, true);
-    go.disabled = false;
+    progress.classList.remove('show'); msg(statusBox, err.message, true); go.disabled = false;
   }
-});
-
-function show(msg, isError = false) {
-  statusBox.style.display = 'block';
-  statusBox.textContent = msg;
-  statusBox.className = 'status' + (isError ? ' error' : '');
-}
+};
 
 async function poll(jobId) {
-  const res = await fetch(`/api/jobs/${jobId}`);
-  const job = await res.json();
-  show(job.step || job.status, job.status === 'error');
+  let job;
+  try { job = await (await fetch('/api/jobs/' + jobId)).json(); }
+  catch { setTimeout(() => poll(jobId), 2500); return; }
+  progressTxt.textContent = job.step || job.status;
   render(job.outputs || []);
-  if (job.status === 'done') { show('מוכן! הסרטונים למטה ⬇️'); go.disabled = false; return; }
-  if (job.status === 'error') { show('שגיאה: ' + job.error, true); go.disabled = false; return; }
+  if (job.status === 'done') {
+    progress.classList.remove('show'); msg(statusBox, '🎉 מוכן! הסרטונים למטה.'); go.disabled = false; return;
+  }
+  if (job.status === 'error') {
+    progress.classList.remove('show'); msg(statusBox, 'שגיאה: ' + job.error, true); go.disabled = false; return;
+  }
   setTimeout(() => poll(jobId), 2500);
 }
 
 function render(outputs) {
-  results.innerHTML = outputs.map(o => `
-    <div class="out">
-      <strong>${o.title}</strong>
-      <video src="${o.url}" controls playsinline poster="${o.cover_url || ''}"></video>
-      <div class="links">
-        <a href="${o.url}" download>⬇️ וידאו</a>
-        ${o.cover_url ? `<a href="${o.cover_url}" download>🖼️ קאבר</a>` : ''}
-        ${o.zip_url ? `<a href="${o.zip_url}" download>📦 חבילת פרסום</a>` : ''}
+  results.innerHTML = outputs.map((o, i) => `
+    <div class="reel">
+      <video src="${o.url}" controls playsinline preload="metadata" poster="${o.cover_url || ''}"></video>
+      <div class="body">
+        <div class="ttl">${o.title || 'סרטון ' + (i + 1)}</div>
+        <div class="copy" id="copy${i}">${escapeHtml(o.caption || '')}${o.hashtags && o.hashtags.length ? '\n\n' + o.hashtags.join(' ') : ''}</div>
+        <div class="acts">
+          <a href="${o.url}" download>⬇️ וידאו</a>
+          ${o.zip_url ? `<a href="${o.zip_url}" download>📦 חבילה</a>` : ''}
+          <button type="button" onclick="copyText('copy${i}', this)">📋 העתק קופי</button>
+        </div>
       </div>
-      <div class="copybox">${o.caption}\n\n${(o.hashtags || []).join(' ')}</div>
-      ${o.narration ? `<div class="copybox">🎙️ ${o.narration}</div>` : ''}
     </div>`).join('');
+}
+function escapeHtml(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+function copyText(id, btn) {
+  navigator.clipboard.writeText(document.getElementById(id).textContent)
+    .then(() => { const t = btn.textContent; btn.textContent = '✓ הועתק'; setTimeout(() => btn.textContent = t, 1500); });
 }
 </script>
 </body>
