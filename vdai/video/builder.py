@@ -23,7 +23,7 @@ from moviepy import (
 )
 
 from ..config import settings
-from ..models import BusinessProfile, CaptionSegment, ReelConcept
+from ..models import BusinessProfile, CaptionSegment, CaptionWord, ReelConcept
 from . import effects, text as textmod
 
 logger = logging.getLogger(__name__)
@@ -245,6 +245,8 @@ def caption_array(text, size, style_name="pill"):
 
 
 def _caption_layers(captions, size, total, style_name="pill"):
+    if style_name == "karaoke":
+        return _karaoke_layers(captions, size, total)
     width, height = size
     layers = []
     for seg in captions:
@@ -258,6 +260,52 @@ def _caption_layers(captions, size, total, style_name="pill"):
             .with_duration(max(0.3, end - seg.start))
             .with_position(("center", int(height * 0.70)))
         )
+    return layers
+
+
+def _karaoke_bursts(captions, max_words=2):
+    """Flatten segments into short (1-2 word) spoken bursts, using per-word
+    timings when available."""
+    bursts = []
+    for seg in captions:
+        words = seg.words or [CaptionWord(seg.text, seg.start, seg.end)]
+        for i in range(0, len(words), max_words):
+            chunk = words[i:i + max_words]
+            text = " ".join(w.word for w in chunk).strip()
+            if text:
+                bursts.append((text, chunk[0].start, chunk[-1].end))
+    return bursts
+
+
+def _karaoke_layers(captions, size, total):
+    """Big, centered, one-to-two-word captions that pop in sync with speech
+    (the modern TikTok/Reels auto-caption look)."""
+    width, height = size
+    layers = []
+    for text, start, end in _karaoke_bursts(captions):
+        if start >= total:
+            break
+        end = min(end, total - 0.05)
+        if end <= start:
+            continue
+        arr = textmod.text_array(
+            text,
+            font_size=int(height * 0.060),
+            max_width=int(width * 0.82),
+            color=(255, 236, 120),
+            stroke_width=max(2, int(height * 0.004)),
+            stroke_color=(18, 12, 8),
+            shadow=True,
+        )
+        dur = end - start
+        clip = (
+            ImageClip(arr)
+            .with_start(start)
+            .with_duration(dur)
+            .with_position(("center", int(height * 0.62)))
+            .with_effects([vfx.CrossFadeIn(min(0.12, dur / 2))])
+        )
+        layers.append(clip)
     return layers
 
 

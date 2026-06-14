@@ -74,7 +74,7 @@ def _build_parser() -> argparse.ArgumentParser:
                      help="מין הקול בקריינות האוטומטית")
     gen.add_argument("--music", help="קובץ מוזיקת רקע (אחרת נבחר מ-assets/music אם קיים)")
     gen.add_argument("--brand", help="קובץ ערכת מותג JSON (ראו brand.example.json)")
-    gen.add_argument("--caption-style", default="pill", choices=["pill", "bold", "minimal"],
+    gen.add_argument("--caption-style", default="pill", choices=["pill", "bold", "minimal", "karaoke"],
                      help="סגנון הכתוביות")
     gen.add_argument("--no-progress-bar", action="store_true", help="בלי פס התקדמות עליון")
     gen.add_argument("--draft", action="store_true",
@@ -100,7 +100,7 @@ def _build_parser() -> argparse.ArgumentParser:
     tr.add_argument("--srt", help="נתיב לשמירת קובץ SRT")
     tr.add_argument("--burn", help="וידאו קיים שעליו ייצרבו הכתוביות")
     tr.add_argument("--out", help="נתיב פלט לוידאו עם כתוביות (עם --burn)")
-    tr.add_argument("--caption-style", default="pill", choices=["pill", "bold", "minimal"])
+    tr.add_argument("--caption-style", default="pill", choices=["pill", "bold", "minimal", "karaoke"])
     tr.add_argument("--whisper-model", default=settings.whisper_model)
     tr.set_defaults(func=_cmd_transcribe)
 

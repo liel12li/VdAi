@@ -52,6 +52,43 @@ def test_build_reel_smoke(profile, tmp_path):
         assert clip.duration == pytest.approx(expected, abs=2.5)
 
 
+def test_karaoke_bursts_from_word_timings():
+    from vdai.models import CaptionWord
+    from vdai.video.builder import _karaoke_bursts
+
+    words = [
+        CaptionWord("ברוכים", 0.0, 0.4), CaptionWord("הבאים", 0.45, 0.9),
+        CaptionWord("אלינו", 0.95, 1.3),
+    ]
+    caps = [CaptionSegment(text="ברוכים הבאים אלינו", start=0.0, end=1.3, words=words)]
+    bursts = _karaoke_bursts(caps, max_words=2)
+    assert [b[0] for b in bursts] == ["ברוכים הבאים", "אלינו"]
+    assert bursts[0][1] == 0.0 and bursts[0][2] == 0.9
+
+
+def test_karaoke_bursts_fallback_without_word_timings():
+    from vdai.video.builder import _karaoke_bursts
+
+    caps = [CaptionSegment(text="שלום עולם", start=0.5, end=1.5)]  # no .words
+    bursts = _karaoke_bursts(caps)
+    assert bursts == [("שלום עולם", 0.5, 1.5)]
+
+
+def test_build_reel_karaoke_captions(profile, tmp_path):
+    from vdai.models import CaptionWord
+
+    concept = template_concepts(profile, count=1, language="he")[0]
+    concept.scenes = concept.scenes[:2]
+    for scene in concept.scenes:
+        scene.duration = 1.2
+    words = [CaptionWord("שלום", 0.2, 0.7), CaptionWord("לכולם", 0.8, 1.4)]
+    captions = [CaptionSegment(text="שלום לכולם", start=0.2, end=1.4, words=words)]
+    out = tmp_path / "karaoke.mp4"
+    result = build_reel(profile, concept, out, captions=captions,
+                        size=(270, 480), fps=12, caption_style="karaoke")
+    assert result.exists() and result.stat().st_size > 10_000
+
+
 def test_build_reel_with_captions(profile, tmp_path):
     concept = template_concepts(profile, count=1, language="he")[0]
     concept.scenes = concept.scenes[:2]

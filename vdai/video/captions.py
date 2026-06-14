@@ -20,24 +20,27 @@ def burn_captions(
     y_ratio: float = 0.78,
     style: str = "pill",
 ) -> Path:
-    """Overlay caption pills on ``video_path`` and write ``output_path``."""
-    from .builder import caption_array
+    """Overlay captions on ``video_path`` and write ``output_path``."""
+    from .builder import _karaoke_layers, caption_array
 
     source = VideoFileClip(str(video_path))
     try:
         width, height = source.w, source.h
         layers: list = [source]
-        for seg in captions:
-            if seg.start >= source.duration:
-                break
-            arr = caption_array(seg.text, (width, height), style)
-            end = min(seg.end, source.duration)
-            layers.append(
-                ImageClip(arr)
-                .with_start(seg.start)
-                .with_duration(max(0.3, end - seg.start))
-                .with_position(("center", int(height * y_ratio)))
-            )
+        if style == "karaoke":
+            layers.extend(_karaoke_layers(captions, (width, height), source.duration))
+        else:
+            for seg in captions:
+                if seg.start >= source.duration:
+                    break
+                arr = caption_array(seg.text, (width, height), style)
+                end = min(seg.end, source.duration)
+                layers.append(
+                    ImageClip(arr)
+                    .with_start(seg.start)
+                    .with_duration(max(0.3, end - seg.start))
+                    .with_position(("center", int(height * y_ratio)))
+                )
 
         final = CompositeVideoClip(layers, size=(width, height)).with_duration(source.duration)
         if source.audio is not None:
