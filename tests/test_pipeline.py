@@ -160,6 +160,38 @@ def test_run_generation_end_to_end(tmp_path):
         assert (clip.w, clip.h) == (540, 540)
 
 
+def test_run_generation_streams_concepts_then_reels(tmp_path):
+    from PIL import Image
+
+    from vdai.pipeline import GenerationOptions, run_generation
+
+    media = tmp_path / "media"
+    media.mkdir()
+    for i, color in enumerate([(200, 90, 60), (60, 120, 200)]):
+        Image.new("RGB", (640, 480), color).save(media / f"p{i}.jpg")
+    profile = BusinessProfile(
+        username="streambiz",
+        posts=[Post(media_path=str(p)) for p in sorted(media.glob("*.jpg"))],
+    )
+    options = GenerationOptions(
+        count=2, language="he", use_ai=False, formats=["square"],
+        draft=True, out_dir=tmp_path / "out", package=True,
+    )
+
+    order = []
+    run_generation(
+        profile, options,
+        on_concepts=lambda cs: order.append(("concepts", len(cs))),
+        on_reel=lambda r: order.append(("reel", r.cover is not None, r.package is not None)),
+    )
+
+    # concepts must arrive before any reel, then one event per finished reel
+    assert order[0] == ("concepts", 2)
+    reels = [e for e in order if e[0] == "reel"]
+    assert len(reels) == 2
+    assert all(cover and pkg for _, cover, pkg in reels)
+
+
 def test_export_package(tmp_path):
     video = tmp_path / "reel.mp4"
     video.write_bytes(b"fake-video")

@@ -164,7 +164,8 @@ async def create_job(
     music_path = await _save_upload(music, job_dir, "music")
 
     with _JOBS_LOCK:
-        _JOBS[job_id] = {"status": "queued", "step": "ממתין בתור...", "outputs": [], "error": None}
+        _JOBS[job_id] = {"status": "queued", "step": "ממתין בתור...",
+                         "outputs": [], "concepts": [], "error": None}
 
     params = {
         "username": username, "name": name, "bio": bio, "count": count,
@@ -244,11 +245,20 @@ def _run_job(job_id: str, p: dict) -> None:
         def on_step(msg: str) -> None:
             _set(job_id, status="running", step=msg)
 
-        results = run_generation(profile, options, on_step=on_step)
-
         base = f"/api/jobs/{job_id}/files"
-        outputs = [
-            {
+
+        def on_concepts(concepts) -> None:
+            # Show the ideas + copy immediately, before videos finish rendering.
+            _set(job_id, concepts=[
+                {"title": c.title, "caption": c.caption, "hashtags": c.hashtags,
+                 "narration": c.narration}
+                for c in concepts
+            ])
+
+        live_outputs: list[dict] = []
+
+        def on_reel(r) -> None:
+            live_outputs.append({
                 "file": r.video.name,
                 "url": f"{base}/{r.video.name}",
                 "cover_url": f"{base}/{r.cover.name}" if r.cover else None,
@@ -257,10 +267,13 @@ def _run_job(job_id: str, p: dict) -> None:
                 "caption": r.concept.caption,
                 "hashtags": r.concept.hashtags,
                 "narration": r.concept.narration,
-            }
-            for r in results
-        ]
-        _set(job_id, status="done", step="הסתיים ✓", outputs=outputs)
+            })
+            _set(job_id, outputs=list(live_outputs))
+
+        run_generation(profile, options, on_step=on_step,
+                       on_concepts=on_concepts, on_reel=on_reel)
+
+        _set(job_id, status="done", step="הסתיים ✓")
     except Exception as exc:  # noqa: BLE001 - job boundary
         logger.exception("Job %s failed", job_id)
         _set(job_id, status="error", error=str(exc), step="שגיאה")

@@ -66,8 +66,15 @@ def run_generation(
     profile: BusinessProfile,
     options: GenerationOptions,
     on_step: StepCallback | None = None,
+    on_concepts: "Callable[[list[ReelConcept]], None] | None" = None,
+    on_reel: "Callable[[ReelOutput], None] | None" = None,
 ) -> list[ReelOutput]:
-    """Run the full pipeline; returns one output per concept × format."""
+    """Run the full pipeline; returns one output per concept × format.
+
+    ``on_concepts`` fires as soon as the creative concepts are ready (before
+    any video renders), and ``on_reel`` fires after each finished reel — so a
+    UI can show ideas immediately and stream in videos one by one.
+    """
     step = on_step or (lambda msg: logger.info("%s", msg))
     out_dir = Path(options.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -76,28 +83,30 @@ def run_generation(
     (out_dir / f"{profile.username}_concepts.json").write_text(
         concepts_to_json(concepts), encoding="utf-8"
     )
+    if on_concepts:
+        on_concepts(concepts)
 
     render_jobs = _plan_renders(profile, concepts, options, out_dir, step)
-    outputs = _render_all(render_jobs, options, step)
+    return _render_all(render_jobs, options, step, on_reel)
 
-    for output in outputs:
-        cover = output.video.with_name(output.video.stem + "_cover.jpg")
-        try:
-            from .video.builder import save_cover
 
-            output.cover = save_cover(output.video, cover)
-        except Exception as exc:  # noqa: BLE001 - cover is a bonus
-            logger.warning("Could not create cover for %s: %s", output.video.name, exc)
-        if options.package:
-            from .packaging import export_package
+def _finalize(output: "ReelOutput", options) -> "ReelOutput":
+    """Add the cover image and (optionally) the publish-package zip."""
+    cover = output.video.with_name(output.video.stem + "_cover.jpg")
+    try:
+        from .video.builder import save_cover
 
-            output.package = export_package(
-                output.video,
-                output.concept,
-                cover_path=output.cover,
-                captions=output.srt_segments,
-            )
-    return outputs
+        output.cover = save_cover(output.video, cover)
+    except Exception as exc:  # noqa: BLE001 - cover is a bonus
+        logger.warning("Could not create cover for %s: %s", output.video.name, exc)
+    if options.package:
+        from .packaging import export_package
+
+        output.package = export_package(
+            output.video, output.concept,
+            cover_path=output.cover, captions=output.srt_segments,
+        )
+    return output
 
 
 # --------------------------------------------------------------------------
@@ -244,18 +253,26 @@ def _execute_render(job: _RenderJob) -> Path:
     )
 
 
-def _render_all(render_jobs: list[_RenderJob], options, step) -> list[ReelOutput]:
+def _render_all(render_jobs: list[_RenderJob], options, step, on_reel=None) -> list[ReelOutput]:
     outputs = []
     total = len(render_jobs)
+
+    def deliver(job, video):
+        output = _finalize(_to_output(job, video), options)
+        outputs.append(output)
+        if on_reel:
+            on_reel(output)
+        return output
+
     if options.jobs > 1 and total > 1:
         step(f"מרנדר {total} סרטונים במקביל ({options.jobs} תהליכים)...")
         with ProcessPoolExecutor(max_workers=options.jobs) as pool:
             for job, video in zip(render_jobs, pool.map(_execute_render, render_jobs)):
-                outputs.append(_to_output(job, video))
+                deliver(job, video)
     else:
         for i, job in enumerate(render_jobs, start=1):
             step(f"מרנדר ({i}/{total}): {job.concept.title} [{job.fmt}]")
-            outputs.append(_to_output(job, _execute_render(job)))
+            deliver(job, _execute_render(job))
     return outputs
 
 

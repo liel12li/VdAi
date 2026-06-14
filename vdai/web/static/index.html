@@ -147,6 +147,9 @@
   .reel { border: 1px solid var(--line); border-radius: 14px; overflow: hidden; background: #fff;
           box-shadow: 0 6px 18px rgba(44,38,32,.07); display: flex; flex-direction: column; }
   .reel video { width: 100%; aspect-ratio: 9/16; object-fit: cover; background: #000; display: block; }
+  .reel .rendering { width: 100%; aspect-ratio: 9/16; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 10px; color: var(--muted);
+    background: var(--field); font-weight: 700; }
   .reel .body { padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
   .reel .ttl { font-weight: 800; }
   .reel .copy { background: var(--field); border: 1px solid var(--line); border-radius: 10px; padding: 9px;
@@ -439,32 +442,44 @@ form.onsubmit = async (e) => {
 async function poll(jobId) {
   let job;
   try { job = await (await fetch('/api/jobs/' + jobId)).json(); }
-  catch { setTimeout(() => poll(jobId), 2500); return; }
+  catch { setTimeout(() => poll(jobId), 2000); return; }
   progressTxt.textContent = job.step || job.status;
-  render(job.outputs || []);
+  render(job.concepts || [], job.outputs || []);
   if (job.status === 'done') {
     progress.classList.remove('show'); msg(statusBox, '🎉 מוכן! הסרטונים למטה.'); go.disabled = false; return;
   }
   if (job.status === 'error') {
     progress.classList.remove('show'); msg(statusBox, 'שגיאה: ' + job.error, true); go.disabled = false; return;
   }
-  setTimeout(() => poll(jobId), 2500);
+  setTimeout(() => poll(jobId), 2000);
 }
 
-function render(outputs) {
-  results.innerHTML = outputs.map((o, i) => `
-    <div class="reel">
-      <video src="${o.url}" controls playsinline preload="metadata" poster="${o.cover_url || ''}"></video>
-      <div class="body">
-        <div class="ttl">${o.title || 'סרטון ' + (i + 1)}</div>
-        <div class="copy" id="copy${i}">${escapeHtml(o.caption || '')}${o.hashtags && o.hashtags.length ? '\n\n' + o.hashtags.join(' ') : ''}</div>
+// Show one card per concept immediately; fill the video in once it's rendered.
+function render(concepts, outputs) {
+  const byTitle = {};
+  outputs.forEach(o => { byTitle[o.title] = o; });
+  const cards = concepts.length ? concepts : outputs;
+  results.innerHTML = cards.map((c, i) => {
+    const o = concepts.length ? (byTitle[c.title] || null) : c;
+    const media = o
+      ? `<video src="${o.url}" controls playsinline preload="metadata" poster="${o.cover_url || ''}"></video>`
+      : `<div class="rendering"><div class="spinner"></div><span>מרנדר…</span></div>`;
+    const acts = o ? `
         <div class="acts">
           <a href="${o.url}" download>⬇️ וידאו</a>
           ${o.zip_url ? `<a href="${o.zip_url}" download>📦 חבילה</a>` : ''}
           <button type="button" onclick="copyText('copy${i}', this)">📋 העתק קופי</button>
-        </div>
+        </div>` : '';
+    return `
+    <div class="reel">
+      ${media}
+      <div class="body">
+        <div class="ttl">${escapeHtml(c.title || 'סרטון ' + (i + 1))}</div>
+        <div class="copy" id="copy${i}">${escapeHtml(c.caption || '')}${c.hashtags && c.hashtags.length ? '\n\n' + c.hashtags.join(' ') : ''}</div>
+        ${acts}
       </div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 function escapeHtml(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 function copyText(id, btn) {
