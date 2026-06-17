@@ -63,3 +63,38 @@ def test_logout_endpoint():
     r = client.post("/api/instagram/logout")
     assert r.status_code == 200
     assert "removed" in r.json()
+
+
+@pytest.mark.parametrize("endpoint,data", [
+    ("/api/instagram/login", {"username": "", "password": ""}),
+    ("/api/instagram/login", {"username": "x", "password": ""}),
+    ("/api/instagram/login/sessionid", {"sessionid": ""}),
+    ("/api/instagram/login/2fa", {"login_id": "", "code": ""}),
+])
+def test_empty_fields_give_friendly_string_error(endpoint, data):
+    """Empty form fields must yield a clean 400 with a Hebrew string message,
+    not FastAPI's 422 validation list (which the UI can't render)."""
+    r = client.post(endpoint, data=data)
+    assert r.status_code == 400
+    assert isinstance(r.json()["detail"], str)
+
+
+def test_import_browser_endpoint_returns_json(monkeypatch):
+    import instaloader
+
+    class NoSession:
+        def __init__(self, *a, **k):
+            self.context = type("C", (), {})()
+            self.context._session = type("S", (), {"cookies": type("J", (), {"update": lambda s, c: None})()})()
+        def test_login(self):
+            return None
+
+    import types
+    fake = types.ModuleType("browser_cookie3")
+    fake.chrome = lambda **k: {}
+    monkeypatch.setitem(__import__("sys").modules, "browser_cookie3", fake)
+    monkeypatch.setattr(instaloader, "Instaloader", NoSession)
+
+    r = client.post("/api/instagram/import-browser", data={"browser": "chrome"})
+    assert r.status_code == 400
+    assert isinstance(r.json()["detail"], str)

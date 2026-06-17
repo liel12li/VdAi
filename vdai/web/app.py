@@ -66,7 +66,7 @@ def manifest() -> JSONResponse:
 
 
 @app.post("/api/instagram/login")
-def instagram_login(username: str = Form(...), password: str = Form(...)):
+def instagram_login(username: str = Form(""), password: str = Form("")):
     """Step 1 of connecting an Instagram account (password)."""
     from ..instagram.auth import InstagramAuthError, begin_web_login
 
@@ -94,7 +94,7 @@ def instagram_import_browser(browser: str = Form("auto")):
 
 
 @app.post("/api/instagram/login/sessionid")
-def instagram_login_sessionid(sessionid: str = Form(...)):
+def instagram_login_sessionid(sessionid: str = Form("")):
     """Connect by pasting a sessionid cookie (bulletproof manual fallback)."""
     from ..instagram.auth import InstagramAuthError, login_with_sessionid
 
@@ -108,7 +108,7 @@ def instagram_login_sessionid(sessionid: str = Form(...)):
 
 
 @app.post("/api/instagram/login/2fa")
-def instagram_login_2fa(login_id: str = Form(...), code: str = Form(...)):
+def instagram_login_2fa(login_id: str = Form(""), code: str = Form("")):
     """Step 2: submit the two-factor authentication code."""
     from ..instagram.auth import InstagramAuthError, complete_web_login_2fa
 

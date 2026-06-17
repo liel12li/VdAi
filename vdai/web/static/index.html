@@ -359,7 +359,11 @@ async function postForm(url, body) {
   let data;
   try { data = text ? JSON.parse(text) : {}; }
   catch { data = { detail: 'שגיאת שרת לא צפויה. נסו שוב.' }; }
-  if (!res.ok) throw new Error(data.detail || data.error || 'שגיאה');
+  if (!res.ok) {
+    let m = data.detail || data.error;
+    if (typeof m !== 'string') m = 'חסרים פרטים — מלאו את כל השדות ונסו שוב.';
+    throw new Error(m);
+  }
   return data;
 }
 function msg(el, text, isErr = false) {
