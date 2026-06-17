@@ -58,29 +58,55 @@ def _pip_install(requirements: list[str], quiet: bool = False) -> bool:
         return False
 
 
+def _deps_stamp_path() -> str:
+    return os.path.join(ROOT, ".vdai_cache", ".deps_stamp")
+
+
+def _requirements_signature() -> str:
+    """A fingerprint of what we expect installed, so a `git pull` that adds a
+    dependency triggers a re-sync on the next launch."""
+    import hashlib
+
+    parts = [",".join(sorted(CORE_DEPS.values())), ",".join(sorted(OPTIONAL_DEPS.values()))]
+    req_file = os.path.join(ROOT, "requirements.txt")
+    if os.path.exists(req_file):
+        with open(req_file, "rb") as fh:
+            parts.append(fh.read().decode("utf-8", "ignore"))
+    return hashlib.sha256("\n".join(parts).encode("utf-8")).hexdigest()
+
+
 def _ensure_dependencies() -> None:
-    """Install missing packages on first run so the app 'just works'."""
+    """Install missing packages so the app 'just works' — on first run, and
+    again whenever requirements change (e.g. after a git pull)."""
     if os.environ.get("VDAI_NO_AUTOINSTALL"):
         return
 
-    if not _missing(CORE_DEPS):
-        return  # everything needed to launch is present — start immediately
+    signature = _requirements_signature()
+    stamp = _deps_stamp_path()
+    try:
+        synced = os.path.exists(stamp) and open(stamp).read().strip() == signature
+    except OSError:
+        synced = False
 
-    print("📦 התקנה ראשונית של הספריות הנדרשות — זה יכול לקחת כמה דקות, רק בפעם הראשונה...\n")
-    req_file = os.path.join(ROOT, "requirements.txt")
     missing_core = _missing(CORE_DEPS)
+    missing_opt = _missing(OPTIONAL_DEPS)
+    if not missing_core and synced and not missing_opt:
+        return  # everything present and up to date — start immediately
 
-    # Happy path: install everything from requirements.txt (live pip output).
-    ok = os.path.exists(req_file) and _pip_install(["-r", req_file])
-    if not ok or _missing(CORE_DEPS):
-        # Fallback: install just the core packages, so a failing optional
-        # package (common on a freshly released Python with no wheels) does
-        # not prevent the app from running. Optional extras are attempted
-        # quietly and never block startup.
-        print("\nמנסה להתקין את הספריות החיוניות בלבד...\n")
-        _pip_install(missing_core)
-        if _missing(OPTIONAL_DEPS):
-            _pip_install(_missing(OPTIONAL_DEPS), quiet=True)
+    if missing_core:
+        print("📦 התקנה ראשונית של הספריות הנדרשות — זה יכול לקחת כמה דקות, רק בפעם הראשונה...\n")
+        req_file = os.path.join(ROOT, "requirements.txt")
+        ok = os.path.exists(req_file) and _pip_install(["-r", req_file])
+        if not ok or _missing(CORE_DEPS):
+            print("\nמנסה להתקין את הספריות החיוניות בלבד...\n")
+            _pip_install(missing_core)
+    elif missing_opt:
+        # Core is fine but an update added new optional packages — sync quietly.
+        _pip_install(missing_opt, quiet=True)
+
+    # Best-effort: ensure optional extras after a core install too.
+    if _missing(OPTIONAL_DEPS):
+        _pip_install(_missing(OPTIONAL_DEPS), quiet=True)
 
     still_missing = _missing(CORE_DEPS)
     if still_missing:
@@ -95,7 +121,16 @@ def _ensure_dependencies() -> None:
             "לחלופין, התקנה ידנית בטרמינל:\n"
             "    pip install -r requirements.txt"
         )
-    print("\n✅ הספריות הותקנו. ממשיך...\n")
+
+    # Record what we synced so we don't reinstall every launch.
+    try:
+        os.makedirs(os.path.dirname(stamp), exist_ok=True)
+        with open(stamp, "w") as fh:
+            fh.write(signature)
+    except OSError:
+        pass
+    if missing_core:
+        print("\n✅ הספריות הותקנו. ממשיך...\n")
 
 
 def _halt(message: str) -> None:

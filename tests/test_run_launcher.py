@@ -54,3 +54,39 @@ def test_ensure_halts_when_core_unfixable(monkeypatch):
         run._ensure_dependencies()
     assert "uvicorn" in halted["msg"]
     assert "Python 3.12" in halted["msg"]
+
+
+def test_requirements_signature_changes_with_optional(monkeypatch):
+    sig1 = run._requirements_signature()
+    monkeypatch.setitem(run.OPTIONAL_DEPS, "newpkg", "newpkg>=1.0")
+    sig2 = run._requirements_signature()
+    assert sig1 != sig2  # adding a dependency changes the fingerprint
+
+
+def test_matching_stamp_skips_install(tmp_path, monkeypatch):
+    monkeypatch.delenv("VDAI_NO_AUTOINSTALL", raising=False)
+    stamp = tmp_path / ".deps_stamp"
+    monkeypatch.setattr(run, "_deps_stamp_path", lambda: str(stamp))
+    monkeypatch.setattr(run, "_missing", lambda deps: [])  # all present
+    sig = run._requirements_signature()
+    stamp.write_text(sig)
+
+    calls = []
+    monkeypatch.setattr(run, "_pip_install", lambda *a, **k: calls.append(a) or True)
+    run._ensure_dependencies()
+    assert calls == []  # up to date → no pip
+
+
+def test_stale_stamp_installs_missing_optional(tmp_path, monkeypatch):
+    monkeypatch.delenv("VDAI_NO_AUTOINSTALL", raising=False)
+    stamp = tmp_path / ".deps_stamp"
+    monkeypatch.setattr(run, "_deps_stamp_path", lambda: str(stamp))
+    stamp.write_text("OLD-SIGNATURE")
+    # core present, one optional missing
+    monkeypatch.setattr(run, "_missing",
+                        lambda deps: [] if deps is run.CORE_DEPS else ["browser_cookie3>=0.19"])
+    calls = []
+    monkeypatch.setattr(run, "_pip_install", lambda reqs, **k: calls.append(reqs) or True)
+    run._ensure_dependencies()
+    assert any("browser_cookie3>=0.19" in c for c in calls)
+    assert stamp.read_text() == run._requirements_signature()  # re-stamped

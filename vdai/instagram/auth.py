@@ -244,18 +244,40 @@ def _format_connection_error(exc: Exception) -> str:
 _BROWSER_LOADERS = ["firefox", "chrome", "edge", "brave", "opera", "chromium"]
 
 
+def _ensure_browser_cookie3():
+    """Import browser_cookie3, installing it on the fly if the app was already
+    running when the dependency was added (so the button self-heals)."""
+    try:
+        import browser_cookie3
+        return browser_cookie3
+    except ImportError:
+        pass
+    import subprocess
+    import sys
+
+    logger.info("Installing browser_cookie3 on demand...")
+    try:
+        subprocess.run(
+            [sys.executable, "-m", "pip", "install", "browser_cookie3>=0.19"],
+            capture_output=True, timeout=180,
+        )
+        import browser_cookie3
+        return browser_cookie3
+    except Exception as exc:  # noqa: BLE001
+        raise InstagramAuthError(
+            "החבילה browser_cookie3 חסרה ולא הצלחתי להתקין אותה אוטומטית. "
+            "סגרו את התוכנה, הריצו 'pip install browser_cookie3', והפעילו שוב — "
+            "או השתמשו בהתחברות עם סיסמה / sessionid."
+        ) from exc
+
+
 def import_browser_session(cache_dir: str | Path, browser: str = "auto") -> dict:
     """Build an Instagram session from cookies of a browser you're logged in to.
 
     This is the most reliable path: it reuses an already-trusted browser
     session, sidestepping checkpoints and 2FA entirely.
     """
-    try:
-        import browser_cookie3
-    except ImportError as exc:  # pragma: no cover
-        raise InstagramAuthError(
-            "החבילה browser_cookie3 חסרה. הריצו: pip install browser_cookie3"
-        ) from exc
+    browser_cookie3 = _ensure_browser_cookie3()
     import instaloader
 
     browsers = _BROWSER_LOADERS if browser in ("auto", "", None) else [browser]
